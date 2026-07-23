@@ -36,7 +36,11 @@ if (process.platform === "win32" && fs.existsSync(oldBin)) {
 }
 
 if (args[0] === "install") {
-  require("./install-wizard.js").main();
+  if (args.length > 2) {
+    console.error("Usage: pavo install [package-source]");
+    process.exit(1);
+  }
+  require("./install-wizard.js").main(args[1]);
 } else {
   maybeWarnNewVersion(args);
 

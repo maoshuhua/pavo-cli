@@ -17,6 +17,13 @@ npx @pavo-dev/cli@latest install
 pavo --version
 ```
 
+在 npm Registry 发布前，也可以直接通过 GitHub Release 安装：
+
+```bash
+npx -y github:maoshuhua/pavo-cli#v0.1.1 install github:maoshuhua/pavo-cli#v0.1.1
+pavo --version
+```
+
 安装完成后重启或新建一个桌面端 Agent 会话，使新 Skill 被重新加载。
 
 也可以在源码目录构建：
