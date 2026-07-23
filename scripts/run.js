@@ -6,7 +6,7 @@ const path = require("path");
 const { maybeWarnNewVersion } = require("./version-check");
 
 const ext = process.platform === "win32" ? ".exe" : "";
-const bin = path.join(__dirname, "..", "bin", "pippit-tool-cli" + ext);
+const bin = path.join(__dirname, "..", "bin", "pavo" + ext);
 const args = process.argv.slice(2);
 
 const oldBin = bin + ".old";
@@ -35,8 +35,6 @@ if (process.platform === "win32" && fs.existsSync(oldBin)) {
   }
 }
 
-// Match the lark-cli install entry: `npx @pippit-dev/cli@latest install`
-// should run the JS setup flow before the native binary exists.
 if (args[0] === "install") {
   require("./install-wizard.js").main();
 } else {
@@ -46,11 +44,11 @@ if (args[0] === "install") {
     try {
       execFileSync(process.execPath, [path.join(__dirname, "install.js")], {
         stdio: "inherit",
-        env: { ...process.env, PIPPIT_CLI_RUN: "true" },
+        env: { ...process.env, PAVO_CLI_RUN: "true" },
       });
     } catch (_) {
       console.error(
-        "\nFailed to prepare pippit-tool-cli binary.\n" +
+        "\nFailed to prepare PAVO CLI binary.\n" +
         "Make sure Go is installed and available in PATH, then retry.\n"
       );
       process.exit(1);

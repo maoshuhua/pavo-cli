@@ -1,11 +1,11 @@
 version: 2
 
 builds:
-  - binary: pippit-tool-cli
+  - binary: pavo
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X github.com/Pippit-dev/pippit-cli/internal/version.Version={{ .Version }}
+      - -s -w -X github.com/maoshuhua/pavo-cli/internal/version.Version={{ .Version }}
     goos:
       - darwin
       - linux
@@ -15,7 +15,7 @@ builds:
       - arm64
 
 archives:
-  - name_template: "pippit-tool-cli-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+  - name_template: "pavo-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         format: zip

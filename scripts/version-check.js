@@ -7,7 +7,7 @@ const { DEFAULT_PKG } = require("./skills");
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function defaultCacheFile() {
-  return path.join(os.homedir(), ".pippit_tool_cli", "version-check.json");
+  return path.join(os.homedir(), ".pavo", "version-check.json");
 }
 
 function currentVersion() {
@@ -55,7 +55,7 @@ function fetchLatestVersion(pkg = DEFAULT_PKG) {
 function shouldSkip(args, env) {
   const cmd = args[0];
   return (
-    env.PIPPIT_CLI_DISABLE_UPDATE_CHECK === "1" ||
+    env.PAVO_CLI_DISABLE_UPDATE_CHECK === "1" ||
     env.CI ||
     cmd === "install" ||
     cmd === "update"
@@ -85,7 +85,7 @@ function maybeWarnNewVersion(args = [], opts = {}) {
   if (compareSemver(latest, current) <= 0) return;
 
   const warn = opts.warn || console.error;
-  warn(`[pippit-tool-cli] New version available: ${current} -> ${latest}. Run: pippit-tool-cli update`);
+  warn(`[pavo] New version available: ${current} -> ${latest}. Run: pavo update`);
 }
 
 module.exports = {

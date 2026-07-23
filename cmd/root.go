@@ -1,39 +1,69 @@
 package cmd
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	// authcmd "github.com/Pippit-dev/pippit-cli/cmd/auth"
-	"github.com/Pippit-dev/pippit-cli/cmd/generate_image"
-	"github.com/Pippit-dev/pippit-cli/cmd/generate_video"
-	"github.com/Pippit-dev/pippit-cli/cmd/short_drama"
-	updatecmd "github.com/Pippit-dev/pippit-cli/cmd/update"
-	"github.com/Pippit-dev/pippit-cli/internal/common"
-	"github.com/Pippit-dev/pippit-cli/internal/config"
-	"github.com/Pippit-dev/pippit-cli/internal/version"
+	updatecmd "github.com/maoshuhua/pavo-cli/cmd/update"
+	"github.com/maoshuhua/pavo-cli/internal/api"
+	"github.com/maoshuhua/pavo-cli/internal/auth"
+	"github.com/maoshuhua/pavo-cli/internal/config"
+	"github.com/maoshuhua/pavo-cli/internal/output"
+	"github.com/maoshuhua/pavo-cli/internal/version"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
-// Execute runs the pippit-tool-cli command tree.
+type dependencies struct {
+	config       *config.Config
+	api          *api.Client
+	store        auth.Store
+	readPassword func() (string, error)
+}
+
 func Execute() error {
-	return NewRootCommand(os.Stdout, os.Stderr).Execute()
+	root, err := NewRootCommand(os.Stdout, os.Stderr)
+	if err != nil {
+		return err
+	}
+	err = root.Execute()
+	if err != nil {
+		_ = output.AppendError(root.CommandPath(), err)
+	}
+	return err
 }
 
-func NewRootCommand(stdout, stderr io.Writer) *cobra.Command {
+func NewRootCommand(stdout, stderr io.Writer) (*cobra.Command, error) {
 	cfg := config.Load()
-	client := common.NewHTTPClient(cfg.BaseURL, cfg.HTTPTimeout, common.NewAccessKeyAuthorizer(cfg.AccessKey))
-	runner := common.NewRunner(cfg, client)
-	return newRootCommand(stdout, stderr, runner)
+	store, err := auth.NewDefaultFileStore(cfg.ConfigFile)
+	if err != nil {
+		return nil, err
+	}
+	tokenProvider := func() (string, error) {
+		token, _, err := auth.ResolveToken(cfg.AccessToken, store)
+		return token, err
+	}
+	client := api.NewClient(cfg.BaseURL, cfg.HTTPTimeout, cfg.Paths, tokenProvider)
+	deps := &dependencies{
+		config: cfg,
+		api:    client,
+		store:  store,
+		readPassword: func() (string, error) {
+			return readPassword(os.Stdin, stderr)
+		},
+	}
+	return newRootCommand(stdout, stderr, deps), nil
 }
 
-func newRootCommand(stdout, stderr io.Writer, runner *common.Runner) *cobra.Command {
+func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "pippit-tool-cli",
-		Short:         "Pippit CLI",
-		Long:          "Pippit CLI generates videos and images, submits short-drama workflows, downloads generated assets, and updates the installed CLI package.",
+		Use:           "pavo",
+		Short:         "PAVO CLI",
+		Long:          "PAVO CLI for desktop agents: login, create conversations, and stream design generation.",
 		Version:       version.Current(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -42,17 +72,32 @@ func newRootCommand(stdout, stderr io.Writer, runner *common.Runner) *cobra.Comm
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	// root.AddCommand(authcmd.NewCommand(stdout, stderr, runner)) // temporarily disabled; auth is via access key injection
-	root.AddCommand(newDownloadResultCommand(stdout, stderr, runner))
-	root.AddCommand(newGetThreadCommand(stdout, stderr, runner))
-	root.AddCommand(newListThreadFileCommand(stdout, stderr, runner))
-	root.AddCommand(generate_image.NewCommand(stdout, stderr, runner))
-	root.AddCommand(generate_video.NewCommand(stdout, stderr, runner))
-	root.AddCommand(generate_video.NewQueryResultCommand(stdout, stderr, runner))
-	root.AddCommand(short_drama.NewCommand(stdout, stderr, runner))
+	root.AddCommand(newLoginCommand(stdout, stderr, deps))
+	root.AddCommand(newConversationCommand(stdout, stderr, deps))
+	root.AddCommand(newStreamCommand(stdout, stderr, deps))
 	root.AddCommand(updatecmd.NewCommand(stdout, stderr))
 	localizeFlagErrors(root)
 	return root
+}
+
+func readPassword(stdin *os.File, stderr io.Writer) (string, error) {
+	fmt.Fprint(stderr, "Password: ")
+	if term.IsTerminal(int(stdin.Fd())) {
+		password, err := term.ReadPassword(int(stdin.Fd()))
+		fmt.Fprintln(stderr)
+		if err != nil {
+			return "", fmt.Errorf("读取密码失败: %w", err)
+		}
+		return string(password), nil
+	}
+	scanner := bufio.NewScanner(stdin)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("读取密码失败: %w", err)
+		}
+		return "", errors.New("没有从标准输入读取到密码")
+	}
+	return scanner.Text(), nil
 }
 
 func localizeFlagErrors(cmd *cobra.Command) {

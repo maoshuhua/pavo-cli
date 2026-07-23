@@ -1,0 +1,139 @@
+package api
+
+import (
+	"encoding/json"
+	"strings"
+)
+
+const SuccessCode = "000000"
+
+type UserInfo struct {
+	ID           string `json:"id"`
+	Username     string `json:"username"`
+	AvatarURL    string `json:"avatar_url"`
+	Email        string `json:"email"`
+	CountryCode  string `json:"country_code"`
+	PhoneNumber  string `json:"phone_number"`
+	AuthProvider string `json:"auth_provider"`
+	AppID        string `json:"app_id"`
+	IsActive     bool   `json:"is_active"`
+	IsNewAccount bool   `json:"is_new_account"`
+	CreatedAt    int64  `json:"created_at"`
+}
+
+type LoginRequest struct {
+	EmailPassword EmailPassword `json:"email_password"`
+}
+
+type EmailPassword struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginData struct {
+	AccessToken string   `json:"access_token"`
+	UserInfo    UserInfo `json:"user_info"`
+}
+
+type LoginResult struct {
+	AccessToken string
+	UserInfo    UserInfo
+}
+
+type CreateConversationRequest struct {
+	Title    string `json:"title"`
+	FolderID string `json:"folder_id"`
+	KBStrict bool   `json:"kb_strict"`
+}
+
+type ConversationID string
+
+func (id *ConversationID) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		*id = ConversationID(text)
+		return nil
+	}
+
+	var number json.Number
+	if err := json.Unmarshal(data, &number); err != nil {
+		return err
+	}
+	*id = ConversationID(number.String())
+	return nil
+}
+
+func (id ConversationID) MarshalJSON() ([]byte, error) {
+	value := strings.TrimSpace(string(id))
+	if value != "" && (len(value) == 1 || value[0] != '0') {
+		numeric := true
+		for _, char := range value {
+			if char < '0' || char > '9' {
+				numeric = false
+				break
+			}
+		}
+		if numeric {
+			return []byte(value), nil
+		}
+	}
+	return json.Marshal(value)
+}
+
+type CreateConversationData struct {
+	ConversationID ConversationID `json:"conversation_id"`
+}
+
+type StreamRequest struct {
+	ConversationID ConversationID `json:"conversation_id"`
+	Prompt         string         `json:"prompt"`
+	Mode           string         `json:"mode"`
+}
+
+type GenerationResult struct {
+	Base64       string `json:"base64,omitempty"`
+	Height       int    `json:"height"`
+	Message      string `json:"message"`
+	Mimetype     string `json:"mimetype"`
+	Ratio        string `json:"ratio"`
+	Success      bool   `json:"success"`
+	ThumbnailURL string `json:"thumbnail_url"`
+	URL          string `json:"url"`
+	Width        int    `json:"width"`
+}
+
+type EventData struct {
+	EventID   string             `json:"event_id"`
+	MessageID string             `json:"message_id"`
+	ModelCode string             `json:"model_code"`
+	Message   string             `json:"message,omitempty"`
+	Results   []GenerationResult `json:"results,omitempty"`
+	TaskID    string             `json:"task_id"`
+	TraceID   string             `json:"trace_id"`
+}
+
+type StreamEvent struct {
+	AppStandaloneCard bool            `json:"app_standalone_card"`
+	Data              EventData       `json:"data"`
+	EventID           string          `json:"event_id"`
+	MessageID         string          `json:"message_id"`
+	ModelCode         string          `json:"model_code"`
+	Seq               int64           `json:"seq"`
+	TaskID            string          `json:"task_id"`
+	Timestamp         int64           `json:"ts"`
+	TraceID           string          `json:"trace_id"`
+	Type              string          `json:"type"`
+	Raw               json.RawMessage `json:"-"`
+}
+
+type StreamOutput struct {
+	ConversationID string             `json:"conversation_id"`
+	TerminalType   string             `json:"terminal_type"`
+	EventID        string             `json:"event_id"`
+	MessageID      string             `json:"message_id"`
+	ModelCode      string             `json:"model_code"`
+	TaskID         string             `json:"task_id"`
+	TraceID        string             `json:"trace_id"`
+	Results        []GenerationResult `json:"results"`
+	Artifacts      []json.RawMessage  `json:"artifacts,omitempty"`
+}

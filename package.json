@@ -1,13 +1,13 @@
 {
-  "name": "@pippit-dev/cli",
-  "version": "1.0.15",
-  "description": "Pippit CLI",
+  "name": "@pavo-dev/cli",
+  "version": "0.1.0",
+  "description": "PAVO CLI and desktop-agent skill",
   "bin": {
-    "pippit-tool-cli": "scripts/run.js"
+    "pavo": "scripts/run.js"
   },
   "scripts": {
     "postinstall": "node scripts/install.js",
-    "test": "node scripts/version-check.test.js && node scripts/skills.test.js && node scripts/install-wizard.test.js && go test ./... && go vet ./..."
+    "test": "node tests/version-check.test.js && node tests/skills.test.js && node tests/install-wizard.test.js && go test ./... && go vet ./..."
   },
   "os": [
     "darwin",
@@ -23,7 +23,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Pippit-dev/cli.git"
+    "url": "git+https://github.com/maoshuhua/pavo-cli.git"
   },
   "license": "MIT",
   "files": [
@@ -35,7 +35,6 @@
     "scripts/platform.js",
     "scripts/run.js",
     "scripts/skills.js",
-    "scripts/telemetry.js",
     "scripts/version-check.js",
     "checksums.txt",
     "README.md",

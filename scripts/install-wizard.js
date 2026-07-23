@@ -4,7 +4,6 @@ const fs = require("fs");
 const path = require("path");
 const { isWindows, run, runSilent } = require("./platform");
 const { DEFAULT_PKG, installGlobalPackageSkills } = require("./skills");
-const { reportBundledSkillTelemetry } = require("./telemetry");
 
 const VERSION = require("../package.json").version.replace(/-.*$/, "");
 
@@ -13,7 +12,7 @@ function defaultInstallPackage() {
 }
 
 function installPackage() {
-  return process.env.PIPPIT_CLI_INSTALL_PACKAGE || defaultInstallPackage();
+  return process.env.PAVO_CLI_INSTALL_PACKAGE || defaultInstallPackage();
 }
 
 function getGloballyInstalledVersion() {
@@ -26,20 +25,21 @@ function getGloballyInstalledVersion() {
   }
 }
 
-function whichPippitToolCli() {
+function whichPavo() {
   try {
-    const prefix = runSilent("npm", ["prefix", "-g"], { timeout: 15000 }).toString().trim();
-    const bin = isWindows
-      ? path.join(prefix, "pippit-tool-cli.cmd")
-      : path.join(prefix, "bin", "pippit-tool-cli");
+    const prefix = runSilent("npm", ["prefix", "-g"], { timeout: 15000 })
+      .toString()
+      .trim();
+    const bin = isWindows ? path.join(prefix, "pavo.cmd") : path.join(prefix, "bin", "pavo");
     if (fs.existsSync(bin)) return bin;
   } catch (_) {
     // Fall back to PATH lookup.
   }
-
   try {
-    const cmd = isWindows ? "where" : "which";
-    return runSilent(cmd, ["pippit-tool-cli"]).toString().split("\n")[0].trim();
+    return runSilent(isWindows ? "where" : "which", ["pavo"])
+      .toString()
+      .split("\n")[0]
+      .trim();
   } catch (_) {
     return null;
   }
@@ -48,42 +48,29 @@ function whichPippitToolCli() {
 function main() {
   const pkg = installPackage();
   const installed = getGloballyInstalledVersion();
-  if (installed) {
-    console.log(`Updating global pippit-tool-cli (${installed}) via ${pkg}...`);
-  } else {
-    console.log(`Installing ${pkg} globally...`);
-  }
+  console.log(installed ? `Updating global PAVO CLI (${installed}) via ${pkg}...` : `Installing ${pkg} globally...`);
   run("npm", ["install", "-g", pkg], {
     timeout: 120000,
-    env: { ...process.env, PIPPIT_CLI_SKIP_SKILLS: "1" },
+    env: { ...process.env, PAVO_CLI_SKIP_SKILLS: "1" },
   });
+  console.log("Installing PAVO desktop-agent skill...");
+  installGlobalPackageSkills(DEFAULT_PKG);
 
-  console.log("Installing pippit-tool-cli skills...");
-  try {
-    installGlobalPackageSkills(DEFAULT_PKG);
-  } catch (err) {
-    if (!installed) {
-      throw err;
-    }
-    console.log("Existing global package does not contain skills; reinstalling...");
-    run("npm", ["install", "-g", pkg], { timeout: 120000 });
-    installGlobalPackageSkills(DEFAULT_PKG);
-  }
-
-  const bin = whichPippitToolCli();
+  const bin = whichPavo();
   if (!bin) {
-    console.error("pippit-tool-cli was installed, but no global command was found in npm prefix.");
-    console.error("Check that npm's global bin directory is in PATH.");
-    process.exit(1);
+    throw new Error("PAVO CLI was installed, but the pavo command was not found in npm PATH");
   }
-
-  console.log(`pippit-tool-cli is ready: ${bin}`);
-  reportBundledSkillTelemetry("install", "npx_install");
-  console.log("Try: pippit-tool-cli short-drama +submit-run --message \"写一个短剧开头\"");
+  console.log(`PAVO CLI is ready: ${bin}`);
+  console.log('Try: pavo conversation create --prompt "生成一张美女图"');
 }
 
 if (require.main === module) {
-  main();
+  try {
+    main();
+  } catch (err) {
+    console.error(`Failed to install PAVO CLI: ${err.message || err}`);
+    process.exit(1);
+  }
 }
 
 module.exports = {

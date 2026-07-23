@@ -10,7 +10,7 @@ import (
 // Version is set by GoReleaser for release binaries.
 var Version = "dev"
 
-const packageName = "@pippit-dev/cli"
+const packageName = "@pavo-dev/cli"
 
 type packageJSON struct {
 	Name    string `json:"name"`

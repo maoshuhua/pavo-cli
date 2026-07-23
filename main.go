@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Pippit-dev/pippit-cli/cmd"
+	"github.com/maoshuhua/pavo-cli/cmd"
 )
 
 func main() {

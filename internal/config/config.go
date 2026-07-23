@@ -7,66 +7,62 @@ import (
 )
 
 const (
-	DefaultBaseURL              = "https://xyq.jianying.com"
-	DefaultHTTPTimeout          = 30 * time.Minute
-	DefaultAuthTTL              = 30 * time.Second
-	DefaultOAuthClientKey       = "mock-cli"
-	DefaultOAuthBaseURL         = "https://passport.bytedance.com"
-	DefaultAuthStoreServiceName = "pippit-cli"
-	SubmitRunPath               = "/api/biz/v1/skill/submit_run"
-	GetThreadPath               = "/api/biz/v1/skill/get_thread"
-	UploadFilePath              = "/api/biz/v1/skill/upload_file"
-	ListThreadFilePath          = "/api/biz/v1/skill/list_thread_file"
-	EnvXYQAccessKey             = "XYQ_ACCESS_KEY"
+	DefaultBaseURL     = "https://api-pixa-test.kiwiar.com"
+	DefaultHTTPTimeout = 10 * time.Minute
+
+	LoginPath        = "/api/v1/user/login"
+	ConversationPath = "/api/v1/chat/conversation"
+	StreamPath       = "/api/v1/chat/stream"
+
+	EnvAPIBaseURL  = "PAVO_API_BASE_URL"
+	EnvAccessToken = "PAVO_ACCESS_TOKEN"
+	EnvPassword    = "PAVO_PASSWORD"
+	EnvHTTPTimeout = "PAVO_HTTP_TIMEOUT"
+	EnvConfigFile  = "PAVO_CONFIG_FILE"
 )
 
-// Config holds runtime settings selected by the root command and passed down
-// into lower layers.
 type Config struct {
 	BaseURL     string
 	HTTPTimeout time.Duration
-	AuthTTL     time.Duration
-	AccessKey   string
-	OAuth       *OAuth
+	AccessToken string
+	Password    string
+	ConfigFile  string
 	Paths       *Paths
 }
 
-type OAuth struct {
-	ClientKey        string
-	BaseURL          string
-	StoreServiceName string
-	Scopes           []string
-}
-
 type Paths struct {
-	SubmitRun      string
-	GetThread      string
-	UploadFile     string
-	ListThreadFile string
+	Login        string
+	Conversation string
+	Stream       string
 }
 
-// Load resolves the built-in runtime config.
 func Load() *Config {
+	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv(EnvAPIBaseURL)), "/")
+	if baseURL == "" {
+		baseURL = DefaultBaseURL
+	}
 	return &Config{
-		BaseURL:     DefaultBaseURL,
-		HTTPTimeout: DefaultHTTPTimeout,
-		AuthTTL:     DefaultAuthTTL,
-		AccessKey:   strings.TrimSpace(os.Getenv(EnvXYQAccessKey)),
-		OAuth:       resolveOAuth(),
+		BaseURL:     baseURL,
+		HTTPTimeout: resolveTimeout(os.Getenv(EnvHTTPTimeout)),
+		AccessToken: strings.TrimSpace(os.Getenv(EnvAccessToken)),
+		Password:    os.Getenv(EnvPassword),
+		ConfigFile:  strings.TrimSpace(os.Getenv(EnvConfigFile)),
 		Paths: &Paths{
-			SubmitRun:      SubmitRunPath,
-			GetThread:      GetThreadPath,
-			UploadFile:     UploadFilePath,
-			ListThreadFile: ListThreadFilePath,
+			Login:        LoginPath,
+			Conversation: ConversationPath,
+			Stream:       StreamPath,
 		},
 	}
 }
 
-func resolveOAuth() *OAuth {
-	return &OAuth{
-		ClientKey:        DefaultOAuthClientKey,
-		BaseURL:          DefaultOAuthBaseURL,
-		StoreServiceName: DefaultAuthStoreServiceName,
-		Scopes:           []string{"user_info", "aigc_generate"},
+func resolveTimeout(raw string) time.Duration {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return DefaultHTTPTimeout
 	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout <= 0 {
+		return DefaultHTTPTimeout
+	}
+	return timeout
 }
