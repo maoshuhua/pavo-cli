@@ -29,7 +29,10 @@ func TestConfigUsesDefaults(t *testing.T) {
 	}
 	if cfg.Paths.Login != config.LoginPath ||
 		cfg.Paths.Conversation != config.ConversationPath ||
-		cfg.Paths.Stream != config.StreamPath {
+		cfg.Paths.Stream != config.StreamPath ||
+		cfg.Paths.ResumeStream != config.ResumeStreamPath ||
+		cfg.Paths.ConversationHistory != config.ConversationHistoryPath ||
+		cfg.Paths.ConversationRunning != config.ConversationRunningPath {
 		t.Fatalf("Paths = %#v", cfg.Paths)
 	}
 }

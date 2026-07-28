@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -15,6 +16,18 @@ import (
 const streamMode = "design"
 
 type EventHandler func(*StreamEvent) error
+
+var ErrStreamEndedWithoutTerminal = errors.New("stream 已结束，但没有收到 GenerationSuccess 或 AgentEnd")
+
+// IsRecoverableStreamError identifies errors for which a client can safely
+// reconnect through Resume without creating another generation request.
+func IsRecoverableStreamError(err error) bool {
+	if err == nil || IsAgentStreamBusy(err) || errors.Is(err, ErrStreamEndedWithoutTerminal) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.DeadlineExceeded) {
+		return err != nil
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
+}
 
 func (c *Client) Stream(ctx context.Context, conversationID, prompt string, handler EventHandler) (*StreamOutput, error) {
 	return c.StreamWithFiles(ctx, conversationID, prompt, nil, handler)
@@ -34,16 +47,39 @@ func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt str
 	if err != nil {
 		return nil, err
 	}
-	requestURL, err := c.resolveURL(c.paths.Stream)
-	if err != nil {
-		return nil, err
-	}
-	payload, err := json.Marshal(StreamRequest{
+	return c.openStream(ctx, c.paths.Stream, conversationID, StreamRequest{
 		ConversationID: ConversationID(conversationID),
 		Prompt:         prompt,
 		Mode:           streamMode,
 		Files:          files,
-	})
+	}, handler)
+}
+
+// Resume replays buffered events and then continues receiving live events for
+// a conversation that is already running. It never submits a second job.
+func (c *Client) Resume(ctx context.Context, conversationID string, fromSeq int64, handler EventHandler) (*StreamOutput, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, errors.New("conversation_id 不能为空")
+	}
+	if fromSeq < 0 {
+		return nil, errors.New("from_seq 不能为负数")
+	}
+	if c.paths == nil || strings.TrimSpace(c.paths.ResumeStream) == "" {
+		return nil, errors.New("PAVO API 未配置 resume stream 路径")
+	}
+	return c.openStream(ctx, c.paths.ResumeStream, conversationID, ResumeStreamRequest{
+		ConversationID: ConversationID(conversationID),
+		FromSeq:        fromSeq,
+	}, handler)
+}
+
+func (c *Client) openStream(ctx context.Context, path, conversationID string, body any, handler EventHandler) (*StreamOutput, error) {
+	requestURL, err := c.resolveURL(path)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("编码 stream 请求失败: %w", err)
 	}
@@ -57,7 +93,7 @@ func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt str
 	if err := c.authorize(req); err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.streamHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("POST %s 请求失败: %w", requestURL, err)
 	}
@@ -149,7 +185,7 @@ func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt str
 		return nil, err
 	}
 	if terminal == nil {
-		return nil, errors.New("stream 已结束，但没有收到 GenerationSuccess 或 AgentEnd")
+		return nil, ErrStreamEndedWithoutTerminal
 	}
 	return &StreamOutput{
 		ConversationID: conversationID,

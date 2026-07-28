@@ -18,15 +18,17 @@ import (
 type TokenProvider func() (string, error)
 
 const (
-	pavoPlatform  = "1"
-	pavoUserAgent = "PAVO-CLI/1.0"
+	pavoPlatform        = "1"
+	pavoUserAgent       = "PAVO-CLI/1.0"
+	AgentStreamBusyCode = "070301"
 )
 
 type Client struct {
-	baseURL       string
-	httpClient    *http.Client
-	tokenProvider TokenProvider
-	paths         *config.Paths
+	baseURL          string
+	httpClient       *http.Client
+	streamHTTPClient *http.Client
+	tokenProvider    TokenProvider
+	paths            *config.Paths
 }
 
 type APIError struct {
@@ -57,8 +59,12 @@ func NewClient(baseURL string, timeout time.Duration, paths *config.Paths, token
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
-		tokenProvider: tokenProvider,
-		paths:         paths,
+		// A generation stream can legitimately outlive the request timeout used
+		// for ordinary APIs. The service emits heartbeats and the caller can
+		// reconnect via Resume when a transport error occurs.
+		streamHTTPClient: &http.Client{},
+		tokenProvider:    tokenProvider,
+		paths:            paths,
 	}
 }
 
@@ -118,6 +124,61 @@ func (c *Client) CreateConversation(ctx context.Context, prompt string) (string,
 	return conversationID, nil
 }
 
+// IsAgentStreamBusy reports whether the service rejected a second stream
+// submission because this conversation already has one in progress.
+func IsAgentStreamBusy(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.Code == AgentStreamBusyCode
+}
+
+// GetConversationStatus returns the lightweight Redis-backed running state for
+// a conversation. Callers can use it to decide whether resume is appropriate.
+func (c *Client) GetConversationStatus(ctx context.Context, conversationID string) (*ConversationStatus, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, errors.New("conversation_id 不能为空")
+	}
+	if c.paths == nil || strings.TrimSpace(c.paths.ConversationRunning) == "" {
+		return nil, errors.New("PAVO API 未配置 conversation running 路径")
+	}
+	var response struct {
+		Code    string             `json:"code"`
+		Message string             `json:"message"`
+		Data    ConversationStatus `json:"data"`
+	}
+	if err := c.getJSON(ctx, c.paths.ConversationRunning, url.Values{"conversation_id": {conversationID}}, &response); err != nil {
+		return nil, err
+	}
+	if err := validateEnvelope(response.Code, response.Message); err != nil {
+		return nil, err
+	}
+	return &response.Data, nil
+}
+
+// GetConversationHistory reads durable conversation data after the Redis stream
+// replay window has expired.
+func (c *Client) GetConversationHistory(ctx context.Context, conversationID string) (*ConversationHistory, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, errors.New("conversation_id 不能为空")
+	}
+	if c.paths == nil || strings.TrimSpace(c.paths.ConversationHistory) == "" {
+		return nil, errors.New("PAVO API 未配置 conversation history 路径")
+	}
+	var response struct {
+		Code    string              `json:"code"`
+		Message string              `json:"message"`
+		Data    ConversationHistory `json:"data"`
+	}
+	if err := c.getJSON(ctx, c.paths.ConversationHistory, url.Values{"conversation_id": {conversationID}}, &response); err != nil {
+		return nil, err
+	}
+	if err := validateEnvelope(response.Code, response.Message); err != nil {
+		return nil, err
+	}
+	return &response.Data, nil
+}
+
 func conversationTitle(prompt string) (string, error) {
 	content := strings.TrimSpace(prompt)
 	if content == "" {
@@ -166,6 +227,43 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, auth
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s %s 请求失败: %w", method, requestURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return responseError(resp)
+	}
+	if out == nil {
+		_, err := io.Copy(io.Discard, resp.Body)
+		return err
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("解析 API 响应失败: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) getJSON(ctx context.Context, path string, query url.Values, out any) error {
+	requestURL, err := c.resolveURL(path)
+	if err != nil {
+		return err
+	}
+	parsedURL, err := url.Parse(requestURL)
+	if err != nil {
+		return fmt.Errorf("解析 API URL 失败: %w", err)
+	}
+	parsedURL.RawQuery = query.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return fmt.Errorf("构造 GET 请求失败: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	setPAVOHeaders(req)
+	if err := c.authorize(req); err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("GET %s 请求失败: %w", parsedURL.String(), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= http.StatusBadRequest {
