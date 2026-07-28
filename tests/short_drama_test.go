@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -85,5 +86,56 @@ func TestCLIShortDramaStartThenReplyUsesOneConversation(t *testing.T) {
 	}
 	if createCalls != 1 || streamCalls != 2 {
 		t.Fatalf("createCalls=%d streamCalls=%d", createCalls, streamCalls)
+	}
+}
+
+func TestCLIShortDramaResultDownloadsEveryPersistedImageAndVideo(t *testing.T) {
+	const conversationID = "340407156788563968"
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case config.ConversationHistoryPath:
+			if request.URL.Query().Get("conversation_id") != conversationID {
+				t.Fatalf("conversation_id = %q", request.URL.Query().Get("conversation_id"))
+			}
+			_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{"is_running":false,"turns":[{"assistant":[{"type":"GenerationArtifact","data":{"results":[{"mimetype":"image/jpeg","url":"` + serverURL + `/scene.jpg"}]}},{"type":"GenerationArtifact","data":{"results":[{"mimetype":"video/mp4","url":"` + serverURL + `/shot.mp4"}]}}]}]}}`))
+		case "/scene.jpg":
+			_, _ = writer.Write([]byte("scene image"))
+		case "/shot.mp4":
+			_, _ = writer.Write([]byte("shot video"))
+		default:
+			t.Fatalf("unexpected path %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	t.Setenv(config.EnvAccessToken, "test-token")
+	t.Setenv(config.EnvConfigFile, filepath.Join(t.TempDir(), "config.json"))
+	downloadDir := filepath.Join(t.TempDir(), "durable-assets")
+	var stdout bytes.Buffer
+	root, err := cmd.NewRootCommand(&stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"short-drama", "result", "--conversation-id", conversationID, "--download-dir", downloadDir})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Results []api.GenerationResult `json:"results"`
+		Assets  []api.GeneratedAsset   `json:"assets"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v; stdout=%q", err, stdout.String())
+	}
+	if len(result.Results) != 2 || len(result.Assets) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	for _, asset := range result.Assets {
+		if _, err := os.Stat(asset.Result.LocalPath); err != nil {
+			t.Fatalf("asset %q was not downloaded: %v", asset.Result.LocalPath, err)
+		}
 	}
 }

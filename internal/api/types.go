@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -189,8 +190,9 @@ func (h *ConversationHistory) LatestGenerationResults() []GenerationResult {
 	}
 	for turnIndex := len(h.Turns) - 1; turnIndex >= 0; turnIndex-- {
 		blocks := h.Turns[turnIndex].Assistant
-		for blockIndex := len(blocks) - 1; blockIndex >= 0; blockIndex-- {
-			block := blocks[blockIndex]
+		var results []GenerationResult
+		seen := make(map[string]struct{})
+		for _, block := range blocks {
 			if block.Type != "GenerationSuccess" && block.Type != "GenerationArtifact" {
 				continue
 			}
@@ -205,7 +207,17 @@ func (h *ConversationHistory) LatestGenerationResults() []GenerationResult {
 					payload.Results[index].Success = true
 				}
 			}
-			return payload.Results
+			for index, result := range payload.Results {
+				key := generationResultKey(result, block.Type, index)
+				if _, exists := seen[key]; exists {
+					continue
+				}
+				seen[key] = struct{}{}
+				results = append(results, result)
+			}
+		}
+		if len(results) > 0 {
+			return results
 		}
 	}
 	return nil
@@ -224,13 +236,38 @@ type GenerationResult struct {
 	Width        int    `json:"width"`
 }
 
+// GeneratedAsset retains the identity of one image, video, or other media
+// item emitted by a streamed generation event. Result is duplicated in
+// StreamOutput.Results for compatibility with existing callers.
+type GeneratedAsset struct {
+	EventID   string           `json:"event_id,omitempty"`
+	EventType string           `json:"event_type,omitempty"`
+	Group     string           `json:"group,omitempty"`
+	ItemID    string           `json:"item_id,omitempty"`
+	Kind      string           `json:"kind,omitempty"`
+	TaskID    string           `json:"task_id,omitempty"`
+	Title     string           `json:"title,omitempty"`
+	Result    GenerationResult `json:"result"`
+}
+
+// AssistantMessage is the complete text reconstructed from MessageDelta
+// events for one server message ID.
+type AssistantMessage struct {
+	MessageID string `json:"message_id,omitempty"`
+	Content   string `json:"content"`
+}
+
 type EventData struct {
+	Content   string             `json:"content,omitempty"`
 	EventID   string             `json:"event_id"`
+	Extra     json.RawMessage    `json:"extra,omitempty"`
+	Kind      string             `json:"kind,omitempty"`
 	MessageID string             `json:"message_id"`
 	ModelCode string             `json:"model_code"`
 	Message   string             `json:"message,omitempty"`
 	Results   []GenerationResult `json:"results,omitempty"`
 	TaskID    string             `json:"task_id"`
+	Title     string             `json:"title,omitempty"`
 	TraceID   string             `json:"trace_id"`
 }
 
@@ -249,13 +286,27 @@ type StreamEvent struct {
 }
 
 type StreamOutput struct {
-	ConversationID string             `json:"conversation_id"`
-	TerminalType   string             `json:"terminal_type"`
-	EventID        string             `json:"event_id"`
-	MessageID      string             `json:"message_id"`
-	ModelCode      string             `json:"model_code"`
-	TaskID         string             `json:"task_id"`
-	TraceID        string             `json:"trace_id"`
-	Results        []GenerationResult `json:"results"`
-	Artifacts      []json.RawMessage  `json:"artifacts,omitempty"`
+	ConversationID    string             `json:"conversation_id"`
+	TerminalType      string             `json:"terminal_type"`
+	EventID           string             `json:"event_id"`
+	MessageID         string             `json:"message_id"`
+	ModelCode         string             `json:"model_code"`
+	TaskID            string             `json:"task_id"`
+	TraceID           string             `json:"trace_id"`
+	Results           []GenerationResult `json:"results"`
+	Assets            []GeneratedAsset   `json:"assets,omitempty"`
+	AssistantText     string             `json:"assistant_text,omitempty"`
+	AssistantMessages []AssistantMessage `json:"assistant_messages,omitempty"`
+	Review            json.RawMessage    `json:"review,omitempty"`
+	Artifacts         []json.RawMessage  `json:"artifacts,omitempty"`
+}
+
+func generationResultKey(result GenerationResult, eventType string, index int) string {
+	if value := strings.TrimSpace(result.URL); value != "" {
+		return "url:" + value
+	}
+	if value := strings.TrimSpace(result.Base64); value != "" {
+		return "base64:" + value
+	}
+	return eventType + ":" + result.Mimetype + ":" + result.Message + ":" + strconv.Itoa(index)
 }

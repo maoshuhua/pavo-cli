@@ -204,6 +204,7 @@ func newShortDramaStatusCommand(stdout, stderr io.Writer, deps *dependencies) *c
 
 func newShortDramaResultCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command {
 	var conversationID string
+	var downloadDir string
 	cmd := &cobra.Command{
 		Use:   "result",
 		Short: "Read durable generated results from a short-drama conversation",
@@ -217,20 +218,28 @@ func newShortDramaResultCommand(stdout, stderr io.Writer, deps *dependencies) *c
 			if err != nil {
 				return err
 			}
-			results := history.LatestGenerationResults()
-			if results == nil {
-				results = []api.GenerationResult{}
+			streamResult := &api.StreamOutput{
+				ConversationID: conversationID,
+				Results:        history.LatestGenerationResults(),
+			}
+			if streamResult.Results == nil {
+				streamResult.Results = []api.GenerationResult{}
+			}
+			if err := downloadStreamResults(cmd.Context(), deps, streamResult, downloadDir); err != nil {
+				return err
 			}
 			return output.WriteJSON(stdout, conversationResultOutput{
 				ConversationID: conversationID,
 				IsRunning:      history.IsRunning,
-				Results:        results,
+				Results:        streamResult.Results,
+				Assets:         streamResult.Assets,
 			})
 		},
 	}
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.Flags().StringVar(&conversationID, "conversation-id", "", "short-drama conversation ID whose results should be read")
+	cmd.Flags().StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	return cmd
 }
 

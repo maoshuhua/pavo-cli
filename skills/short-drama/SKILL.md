@@ -24,7 +24,7 @@ description: 使用 PAVO CLI 创建、续写、修改和恢复多轮短剧创作
 pavo short-drama start --prompt "USER_PROMPT"
 ```
 
-从 stdout 的最终 JSON 记录并向用户返回 `conversation_id`。过程事件会写入 stderr；其中的文本、问题、选项和确认请求是下一步的依据。
+从 stdout 的最终 JSON 记录并向用户返回 `conversation_id`。优先读取 `assistant_text`（完整服务端文本）、`assistant_messages` 和 `review`，将服务端给出的剧本、角色、场景或确认详情完整展示给用户；不要只做一句概括。过程事件会写入 stderr，仅用于诊断。
 
 ## 后续轮次
 
@@ -53,7 +53,7 @@ pavo short-drama status --conversation-id "CONVERSATION_ID"
 pavo short-drama result --conversation-id "CONVERSATION_ID"
 ```
 
-若最终 `results` 含有成功的 `url`，默认先返回 URL。仅在用户要求保存、导出或在桌面聊天中展示产物时下载：
+若最终 `results` 或 `assets[].result` 含有成功的 `url`，默认先返回 URL。仅在用户要求保存、导出或在桌面聊天中展示产物时下载：
 
 ```bash
 pavo download-result \
@@ -61,7 +61,9 @@ pavo download-result \
   --output-path "LOCAL_OUTPUT_FILE"
 ```
 
-也可在 `start`、`reply` 或 `resume` 中使用 `--download-dir "ABSOLUTE_DIRECTORY"`，让 CLI 为成功结果写入绝对 `local_path`。
+也可在 `start`、`reply` 或 `resume` 中使用 `--download-dir "ABSOLUTE_DIRECTORY"`，让 CLI 为每一张成功图片和每一段成功视频写入绝对 `assets[].result.local_path`（同时兼容填入 `results[].local_path`）。
+
+桌面聊天中需要展示角色图、场景图、关键帧或视频时，必须在该轮命令上传入 `--download-dir`，并使用每个阶段独立的绝对目录，例如 `C:\\pavo\\short-drama\\CONVERSATION_ID\\step-4-character-image` 或 `...\\step-7-shot-video`。收到结果后，展示所有带 `local_path` 的成功资产；不要只展示最后一个结果，也不要只返回远程 URL。
 
 ## 身份验证与失败处理
 

@@ -121,14 +121,7 @@ func (c *Client) openStream(ctx context.Context, path, conversationID string, bo
 		return nil, responseError(resp)
 	}
 
-	var terminal *StreamEvent
-	var eventID string
-	var messageID string
-	var modelCode string
-	var taskID string
-	var traceID string
-	var results []GenerationResult
-	var artifacts []json.RawMessage
+	collector := NewStreamCollector(conversationID)
 	consume := func(raw []byte) error {
 		event, err := decodeEvent(raw)
 		if err != nil {
@@ -137,42 +130,7 @@ func (c *Client) openStream(ctx context.Context, path, conversationID string, bo
 		if event == nil {
 			return nil
 		}
-		if event.EventID != "" {
-			eventID = event.EventID
-		} else if event.Data.EventID != "" {
-			eventID = event.Data.EventID
-		}
-		if event.MessageID != "" {
-			messageID = event.MessageID
-		} else if event.Data.MessageID != "" {
-			messageID = event.Data.MessageID
-		}
-		if event.ModelCode != "" {
-			modelCode = event.ModelCode
-		} else if event.Data.ModelCode != "" {
-			modelCode = event.Data.ModelCode
-		}
-		if event.TaskID != "" {
-			taskID = event.TaskID
-		} else if event.Data.TaskID != "" {
-			taskID = event.Data.TaskID
-		}
-		if event.TraceID != "" {
-			traceID = event.TraceID
-		} else if event.Data.TraceID != "" {
-			traceID = event.Data.TraceID
-		}
-		if len(event.Data.Results) > 0 {
-			results = append(results[:0], event.Data.Results...)
-			if event.Type == "GenerationArtifact" {
-				for index := range results {
-					results[index].Success = true
-				}
-			}
-		}
-		if event.Type == "GenerationArtifact" && len(event.Raw) > 0 {
-			artifacts = append(artifacts, append(json.RawMessage(nil), event.Raw...))
-		}
+		collector.Add(event)
 		if handler != nil {
 			if err := handler(event); err != nil {
 				return err
@@ -180,7 +138,6 @@ func (c *Client) openStream(ctx context.Context, path, conversationID string, bo
 		}
 		switch event.Type {
 		case "GenerationSuccess", "AgentEnd":
-			terminal = event
 			return io.EOF
 		case "GenerationFailed", "GenerationFailure", "TaskFailed", "Error":
 			message := strings.TrimSpace(event.Data.Message)
@@ -203,20 +160,11 @@ func (c *Client) openStream(ctx context.Context, path, conversationID string, bo
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
-	if terminal == nil {
+	result := collector.Output()
+	if result == nil || result.TerminalType == "" {
 		return nil, ErrStreamEndedWithoutTerminal
 	}
-	return &StreamOutput{
-		ConversationID: conversationID,
-		TerminalType:   terminal.Type,
-		EventID:        eventID,
-		MessageID:      messageID,
-		ModelCode:      modelCode,
-		TaskID:         taskID,
-		TraceID:        traceID,
-		Results:        results,
-		Artifacts:      artifacts,
-	}, nil
+	return result, nil
 }
 
 func normalizeChatAttachments(files []ChatAttachment) ([]ChatAttachment, error) {

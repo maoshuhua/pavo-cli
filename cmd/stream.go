@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/maoshuhua/pavo-cli/internal/api"
 	"github.com/maoshuhua/pavo-cli/internal/output"
@@ -137,12 +138,19 @@ func downloadStreamResults(ctx context.Context, deps *dependencies, result *api.
 	if err != nil {
 		return fmt.Errorf("解析下载目录失败: %w", err)
 	}
-	for index := range result.Results {
-		generated := &result.Results[index]
+	if len(result.Assets) == 0 && len(result.Results) > 0 {
+		result.Assets = make([]api.GeneratedAsset, len(result.Results))
+		for index, generated := range result.Results {
+			result.Assets[index] = api.GeneratedAsset{Result: generated}
+		}
+	}
+	for index := range result.Assets {
+		asset := &result.Assets[index]
+		generated := &asset.Result
 		if !generated.Success || strings.TrimSpace(generated.URL) == "" {
 			continue
 		}
-		outputPath := filepath.Join(absDir, fmt.Sprintf("result-%d%s", index+1, generatedResultExtension(generated.Mimetype)))
+		outputPath := filepath.Join(absDir, generatedAssetFilename(*asset, index))
 		if _, err := deps.api.DownloadResult(ctx, api.DownloadResultOptions{
 			URL:        generated.URL,
 			OutputPath: outputPath,
@@ -151,8 +159,65 @@ func downloadStreamResults(ctx context.Context, deps *dependencies, result *api.
 			return fmt.Errorf("下载第 %d 个生成结果失败: %w", index+1, err)
 		}
 		generated.LocalPath = outputPath
+		for resultIndex := range result.Results {
+			if sameGeneratedResult(result.Results[resultIndex], *generated) {
+				result.Results[resultIndex].LocalPath = outputPath
+			}
+		}
 	}
 	return nil
+}
+
+func generatedAssetFilename(asset api.GeneratedAsset, index int) string {
+	parts := make([]string, 0, 3)
+	if value := safeFilenamePart(asset.Group); value != "" {
+		parts = append(parts, value)
+	}
+	if value := safeFilenamePart(asset.ItemID); value != "" {
+		parts = append(parts, value)
+	}
+	if value := safeFilenamePart(asset.Title); value != "" {
+		parts = append(parts, value)
+	}
+	if len(parts) == 0 {
+		if value := safeFilenamePart(asset.Kind); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "result")
+	}
+	return fmt.Sprintf("%02d-%s%s", index+1, strings.Join(parts, "-"), generatedResultExtension(asset.Result.Mimetype))
+}
+
+func safeFilenamePart(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	previousSeparator := false
+	for _, char := range value {
+		if unicode.IsLetter(char) || unicode.IsDigit(char) {
+			builder.WriteRune(char)
+			previousSeparator = false
+			continue
+		}
+		if !previousSeparator {
+			builder.WriteByte('-')
+			previousSeparator = true
+		}
+	}
+	return strings.Trim(builder.String(), "-.")
+}
+
+func sameGeneratedResult(left, right api.GenerationResult) bool {
+	leftURL := strings.TrimSpace(left.URL)
+	rightURL := strings.TrimSpace(right.URL)
+	if leftURL != "" || rightURL != "" {
+		return leftURL == rightURL
+	}
+	return strings.TrimSpace(left.Base64) != "" && left.Base64 == right.Base64
 }
 
 func generatedResultExtension(mimetype string) string {
@@ -175,10 +240,12 @@ func runStreamWithRecovery(
 	start bool,
 ) (*api.StreamOutput, error) {
 	lastSeq := fromSeq
+	collector := api.NewStreamCollector(conversationID)
 	handler := func(event *api.StreamEvent) error {
 		if event.Seq > lastSeq {
 			lastSeq = event.Seq
 		}
+		collector.Add(event)
 		return writeStreamEvent(stderr, raw, event)
 	}
 
@@ -194,6 +261,9 @@ func runStreamWithRecovery(
 			result, err = deps.api.StreamWithOptions(ctx, conversationID, prompt, streamOptions, handler)
 		}
 		if err == nil {
+			if combined := collector.Output(); combined != nil && combined.TerminalType != "" {
+				return combined, nil
+			}
 			return result, nil
 		}
 		if ctx.Err() != nil {

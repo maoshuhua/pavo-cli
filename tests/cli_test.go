@@ -212,6 +212,64 @@ func TestCLIStreamDownloadsSuccessfulResultsToRequestedDirectory(t *testing.T) {
 	}
 }
 
+func TestCLIStreamDownloadsEveryImageAndVideoArtifact(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case config.StreamPath:
+			writer.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = writer.Write([]byte(
+				`{"data":{"title":"场景/秦淮河·夜色","kind":"image","extra":{"short_drama_item_id":"qinhuai_river_night","short_drama_parallel_group":"scene_image"},"results":[{"url":"` + serverURL + `/qinhuai.jpg","mimetype":"image/jpeg"}]},"seq":1,"type":"GenerationArtifact"}` + "\n" +
+					`{"data":{"title":"分镜视频/镜头 1","kind":"video","extra":{"short_drama_item_id":"shot-1","short_drama_parallel_group":"shot_video"},"results":[{"url":"` + serverURL + `/shot-1.mp4","mimetype":"video/mp4"}]},"seq":2,"type":"GenerationArtifact"}` + "\n" +
+					`{"data":{},"seq":3,"type":"AgentEnd"}` + "\n",
+			))
+		case "/qinhuai.jpg":
+			_, _ = writer.Write([]byte("qinhuai image"))
+		case "/shot-1.mp4":
+			_, _ = writer.Write([]byte("shot video"))
+		default:
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	t.Setenv(config.EnvAccessToken, "test-token")
+	t.Setenv(config.EnvConfigFile, filepath.Join(t.TempDir(), "config.json"))
+	downloadDir := filepath.Join(t.TempDir(), "short-drama-assets")
+	var stdout bytes.Buffer
+	root, err := cmd.NewRootCommand(&stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"stream", "--conversation-id", "conversation-1", "--prompt", "生成短剧素材", "--download-dir", downloadDir})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	var result api.StreamOutput
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v; stdout=%q", err, stdout.String())
+	}
+	if len(result.Assets) != 2 || len(result.Results) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	for _, asset := range result.Assets {
+		if !filepath.IsAbs(asset.Result.LocalPath) {
+			t.Fatalf("asset local_path = %q", asset.Result.LocalPath)
+		}
+		if _, err := os.Stat(asset.Result.LocalPath); err != nil {
+			t.Fatalf("asset %q was not downloaded: %v", asset.Result.LocalPath, err)
+		}
+	}
+	if result.Results[0].LocalPath == "" || result.Results[1].LocalPath == "" ||
+		!strings.Contains(filepath.Base(result.Assets[0].Result.LocalPath), "scene-image") ||
+		!strings.Contains(filepath.Base(result.Assets[1].Result.LocalPath), "shot-video") {
+		t.Fatalf("downloaded result = %#v", result)
+	}
+}
+
 func TestCLIStreamResumesAnAlreadyActiveConversation(t *testing.T) {
 	var streamCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -258,6 +316,56 @@ func TestCLIStreamResumesAnAlreadyActiveConversation(t *testing.T) {
 		t.Fatalf("stdout is not valid JSON: %v; stdout=%q", err, stdout.String())
 	}
 	if result.TerminalType != "GenerationSuccess" || len(result.Results) != 1 || result.Results[0].URL != "https://example.test/result.jpg" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestCLIStreamKeepsMessageDeltasAndAssetsAcrossReconnect(t *testing.T) {
+	var streamCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case config.StreamPath:
+			streamCalls++
+			writer.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = writer.Write([]byte(`{"data":{"content":"前半段","message_id":"assistant-1"},"message_id":"assistant-1","seq":1,"type":"MessageDelta"}` + "\n"))
+		case config.ResumeStreamPath:
+			var body api.ResumeStreamRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.FromSeq != 1 {
+				t.Fatalf("resume body = %#v", body)
+			}
+			writer.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = writer.Write([]byte(
+				`{"data":{"content":"后半段","message_id":"assistant-1"},"message_id":"assistant-1","seq":2,"type":"MessageDelta"}` + "\n" +
+					`{"data":{"results":[{"url":"https://example.test/clip.mp4","mimetype":"video/mp4"}]},"seq":3,"type":"GenerationArtifact"}` + "\n" +
+					`{"data":{},"message_id":"assistant-1","seq":4,"type":"AgentEnd"}` + "\n",
+			))
+		default:
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	t.Setenv(config.EnvAccessToken, "test-token")
+	t.Setenv(config.EnvConfigFile, filepath.Join(t.TempDir(), "config.json"))
+	var stdout bytes.Buffer
+	root, err := cmd.NewRootCommand(&stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"stream", "--conversation-id", "338575800850784256", "--prompt", "生成视频"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var result api.StreamOutput
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v; stdout=%q", err, stdout.String())
+	}
+	if streamCalls != 1 || result.AssistantText != "前半段后半段" || len(result.Assets) != 1 ||
+		result.Assets[0].Result.URL != "https://example.test/clip.mp4" {
 		t.Fatalf("result = %#v", result)
 	}
 }

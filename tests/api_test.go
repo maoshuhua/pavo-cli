@@ -192,6 +192,39 @@ func TestAPIStreamAcceptsAgentEndAndPreservesArtifacts(t *testing.T) {
 	}
 }
 
+func TestAPIStreamAggregatesMessageDeltasReviewAndAllAssets(t *testing.T) {
+	const firstMessage = `{"data":{"content":"完整","message_id":"assistant-1"},"message_id":"assistant-1","seq":1,"type":"MessageDelta"}`
+	const secondMessage = `{"data":{"content":"确认信息","message_id":"assistant-1"},"message_id":"assistant-1","seq":2,"type":"MessageDelta"}`
+	const imageArtifact = `{"data":{"title":"场景/秦淮河·夜色","kind":"image","extra":{"short_drama_item_id":"qinhuai_river_night","short_drama_parallel_group":"scene_image"},"results":[{"mimetype":"image/jpeg","url":"https://example.test/qinhuai.jpg"}]},"event_id":"image-artifact","seq":3,"type":"GenerationArtifact"}`
+	const videoArtifact = `{"data":{"title":"分镜视频/镜头 1","kind":"video","extra":{"short_drama_item_id":"shot-1","short_drama_parallel_group":"shot_video"},"results":[{"mimetype":"video/mp4","url":"https://example.test/shot-1.mp4"}]},"event_id":"video-artifact","seq":4,"type":"GenerationArtifact"}`
+	const review = `{"data":{"title":"第 4 步 / 角色、场景与道具图","summary":"请确认生成结果"},"seq":5,"type":"HumanReview"}`
+	const agentEnd = `{"data":{},"message_id":"assistant-1","seq":6,"type":"AgentEnd"}`
+	server := newStreamServer(t, "application/x-ndjson", func(writer http.ResponseWriter) {
+		_, _ = writer.Write([]byte(strings.Join([]string{firstMessage, secondMessage, imageArtifact, videoArtifact, review, agentEnd}, "\n") + "\n"))
+	})
+	defer server.Close()
+
+	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
+	result, err := client.Stream(context.Background(), "conversation-1", "prompt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AssistantText != "完整确认信息" || len(result.AssistantMessages) != 1 ||
+		result.AssistantMessages[0].Content != "完整确认信息" {
+		t.Fatalf("messages = %#v", result)
+	}
+	if len(result.Assets) != 2 || len(result.Results) != 2 ||
+		!result.Results[0].Success || !result.Results[1].Success ||
+		result.Assets[0].Group != "scene_image" || result.Assets[1].Group != "shot_video" ||
+		result.Assets[1].Result.URL != "https://example.test/shot-1.mp4" {
+		t.Fatalf("assets = %#v", result)
+	}
+	if !strings.Contains(string(result.Review), `"type":"HumanReview"`) ||
+		!strings.Contains(string(result.Review), "请确认生成结果") {
+		t.Fatalf("review = %s", result.Review)
+	}
+}
+
 func TestAPIStreamSendsNumericConversationIDAsJSONNumber(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if got := request.Header.Get("X-Platform"); got != "1" {
@@ -353,6 +386,18 @@ func TestAPIConversationStatusAndHistoryReturnDurableResults(t *testing.T) {
 	}
 	results := history.LatestGenerationResults()
 	if len(results) != 1 || results[0].URL != "https://example.test/result.png" {
+		t.Fatalf("results = %#v", results)
+	}
+}
+
+func TestConversationHistoryAggregatesAllLatestTurnArtifacts(t *testing.T) {
+	history := &api.ConversationHistory{Turns: []api.ConversationTurn{{Assistant: []api.ContentBlock{
+		{Type: "GenerationArtifact", Data: json.RawMessage(`{"results":[{"mimetype":"image/jpeg","url":"https://example.test/one.jpg"}]}`)},
+		{Type: "GenerationArtifact", Data: json.RawMessage(`{"results":[{"mimetype":"video/mp4","url":"https://example.test/two.mp4"}]}`)},
+	}}}}
+	results := history.LatestGenerationResults()
+	if len(results) != 2 || !results[0].Success || !results[1].Success ||
+		results[0].URL != "https://example.test/one.jpg" || results[1].URL != "https://example.test/two.mp4" {
 		t.Fatalf("results = %#v", results)
 	}
 }
