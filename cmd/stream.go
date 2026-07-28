@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,6 +21,28 @@ const (
 	maxAutomaticResumeAttempts = 3
 	resumeRetryDelay           = time.Second
 )
+
+type streamRunOptions struct {
+	raw         bool
+	liveAssets  bool
+	downloadDir string
+}
+
+// streamAssetReadyOutput is emitted as one JSONL record for each downloaded
+// image or video when --live-assets is enabled.
+type streamAssetReadyOutput struct {
+	Type           string             `json:"type"`
+	ConversationID string             `json:"conversation_id"`
+	Seq            int64              `json:"seq"`
+	Asset          api.GeneratedAsset `json:"asset"`
+}
+
+// streamCompleteOutput is the final JSONL record when --live-assets is
+// enabled. Its result has the same shape as the legacy final JSON output.
+type streamCompleteOutput struct {
+	Type   string            `json:"type"`
+	Result *api.StreamOutput `json:"result"`
+}
 
 func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command {
 	var conversationID string
@@ -44,10 +67,10 @@ func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 			if err != nil {
 				return err
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, prompt, api.StreamOptions{
+			result, err := runStreamWithRecovery(cmd.Context(), stdout, stderr, deps, conversationID, prompt, api.StreamOptions{
 				Mode:  api.StreamModeDesign,
 				Files: attachments,
-			}, 0, raw, true)
+			}, 0, streamRunOptions{raw: raw}, true)
 			if err != nil {
 				return err
 			}
@@ -105,7 +128,7 @@ func newResumeCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 			if fromSeq < 0 {
 				return errors.New("from_seq 不能为负数")
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, "", api.StreamOptions{}, fromSeq, raw, false)
+			result, err := runStreamWithRecovery(cmd.Context(), stdout, stderr, deps, conversationID, "", api.StreamOptions{}, fromSeq, streamRunOptions{raw: raw}, false)
 			if err != nil {
 				return err
 			}
@@ -150,22 +173,37 @@ func downloadStreamResults(ctx context.Context, deps *dependencies, result *api.
 		if !generated.Success || strings.TrimSpace(generated.URL) == "" {
 			continue
 		}
-		outputPath := filepath.Join(absDir, generatedAssetFilename(*asset, index))
-		if _, err := deps.api.DownloadResult(ctx, api.DownloadResultOptions{
-			URL:        generated.URL,
-			OutputPath: outputPath,
-			Force:      true,
-		}); err != nil {
-			return fmt.Errorf("下载第 %d 个生成结果失败: %w", index+1, err)
-		}
-		generated.LocalPath = outputPath
-		for resultIndex := range result.Results {
-			if sameGeneratedResult(result.Results[resultIndex], *generated) {
-				result.Results[resultIndex].LocalPath = outputPath
+		if localPath := strings.TrimSpace(generated.LocalPath); localPath != "" {
+			if info, err := os.Stat(localPath); err == nil && !info.IsDir() {
+				setResultLocalPath(result, generated, localPath)
+				continue
 			}
 		}
+		outputPath := filepath.Join(absDir, generatedAssetFilename(*asset, index))
+		if err := downloadGeneratedAsset(ctx, deps, *asset, outputPath); err != nil {
+			return fmt.Errorf("下载第 %d 个生成结果失败: %w", index+1, err)
+		}
+		setResultLocalPath(result, generated, outputPath)
 	}
 	return nil
+}
+
+func downloadGeneratedAsset(ctx context.Context, deps *dependencies, asset api.GeneratedAsset, outputPath string) error {
+	_, err := deps.api.DownloadResult(ctx, api.DownloadResultOptions{
+		URL:        asset.Result.URL,
+		OutputPath: outputPath,
+		Force:      true,
+	})
+	return err
+}
+
+func setResultLocalPath(result *api.StreamOutput, generated *api.GenerationResult, localPath string) {
+	generated.LocalPath = localPath
+	for resultIndex := range result.Results {
+		if sameGeneratedResult(result.Results[resultIndex], *generated) {
+			result.Results[resultIndex].LocalPath = localPath
+		}
+	}
 }
 
 func generatedAssetFilename(asset api.GeneratedAsset, index int) string {
@@ -230,23 +268,61 @@ func generatedResultExtension(mimetype string) string {
 
 func runStreamWithRecovery(
 	ctx context.Context,
+	stdout io.Writer,
 	stderr io.Writer,
 	deps *dependencies,
 	conversationID string,
 	prompt string,
 	streamOptions api.StreamOptions,
 	fromSeq int64,
-	raw bool,
+	runOptions streamRunOptions,
 	start bool,
 ) (*api.StreamOutput, error) {
 	lastSeq := fromSeq
 	collector := api.NewStreamCollector(conversationID)
+	liveDownloadDir := strings.TrimSpace(runOptions.downloadDir)
+	if runOptions.liveAssets && liveDownloadDir != "" {
+		var err error
+		liveDownloadDir, err = filepath.Abs(liveDownloadDir)
+		if err != nil {
+			return nil, fmt.Errorf("解析下载目录失败: %w", err)
+		}
+	}
+	liveAssetIndex := 0
 	handler := func(event *api.StreamEvent) error {
 		if event.Seq > lastSeq {
 			lastSeq = event.Seq
 		}
-		collector.Add(event)
-		return writeStreamEvent(stderr, raw, event)
+		assets := collector.AddAndGetNewAssets(event)
+		if err := writeStreamEvent(stderr, runOptions.raw, event); err != nil {
+			return err
+		}
+		if !runOptions.liveAssets {
+			return nil
+		}
+		for _, asset := range assets {
+			if !asset.Result.Success || (strings.TrimSpace(asset.Result.URL) == "" && strings.TrimSpace(asset.Result.Base64) == "") {
+				continue
+			}
+			liveAssetIndex++
+			if liveDownloadDir != "" && strings.TrimSpace(asset.Result.URL) != "" {
+				outputPath := filepath.Join(liveDownloadDir, generatedAssetFilename(asset, liveAssetIndex-1))
+				if err := downloadGeneratedAsset(ctx, deps, asset, outputPath); err != nil {
+					return fmt.Errorf("下载实时生成结果失败: %w", err)
+				}
+				asset.Result.LocalPath = outputPath
+				collector.SetAssetLocalPath(asset, outputPath)
+			}
+			if err := output.WriteJSON(stdout, streamAssetReadyOutput{
+				Type:           "asset_ready",
+				ConversationID: conversationID,
+				Seq:            event.Seq,
+				Asset:          asset,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	resume := !start
@@ -289,6 +365,13 @@ func runStreamWithRecovery(
 			return nil, err
 		}
 	}
+}
+
+func writeStreamResult(stdout io.Writer, result *api.StreamOutput, liveAssets bool) error {
+	if liveAssets {
+		return output.WriteJSON(stdout, streamCompleteOutput{Type: "complete", Result: result})
+	}
+	return output.WriteJSON(stdout, result)
 }
 
 func writeStreamEvent(stderr io.Writer, raw bool, event *api.StreamEvent) error {

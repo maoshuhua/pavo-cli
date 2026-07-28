@@ -180,7 +180,9 @@ pavo short-drama status --conversation-id "340407156788563968"
 pavo short-drama result --conversation-id "340407156788563968"
 ```
 
-`start` 与 `reply` 支持 `--image-model-code`、`--video-model-code` 覆盖默认模型，也支持 `--download-dir` 为成功结果写入绝对本地路径。
+`start` 与 `reply` 支持 `--image-model-code`、`--video-model-code` 覆盖默认模型；`start`、`reply` 与 `resume` 都支持 `--download-dir` 为成功结果写入绝对本地路径。
+
+桌面端需要逐张展示分镜图或逐段展示分镜视频时，给 `start`、`reply` 或 `resume` 增加 `--live-assets --download-dir <绝对目录>`。此时 stdout 改为 JSONL：每个已下载的产物先输出 `{"type":"asset_ready","asset":...}`，最后以 `{"type":"complete","result":...}` 收束本轮；未启用该选项时仍保持原有单个最终 JSON 输出。
 
 ## 恢复长任务
 

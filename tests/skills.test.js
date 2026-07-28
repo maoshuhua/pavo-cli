@@ -62,6 +62,9 @@ for (const requiredText of [
   "short_drama",
   "agnes-image",
   "agnes-video",
+  "--live-assets",
+  "asset_ready",
+  "complete",
 ]) {
   assert.ok(shortDramaSkill.includes(requiredText), `short-drama skill missing contract: ${requiredText}`);
 }

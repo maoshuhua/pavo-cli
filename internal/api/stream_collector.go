@@ -66,6 +66,36 @@ func (c *StreamCollector) Add(event *StreamEvent) bool {
 	return true
 }
 
+// AddAndGetNewAssets stores an event and returns only the generated assets
+// that were first observed in that event. It is useful to render completed
+// images and videos while a stream is still running without re-emitting
+// replayed assets after a reconnect.
+func (c *StreamCollector) AddAndGetNewAssets(event *StreamEvent) []GeneratedAsset {
+	if c == nil {
+		return nil
+	}
+	assetCount := len(c.assets)
+	if !c.Add(event) || len(c.assets) == assetCount {
+		return nil
+	}
+	return append([]GeneratedAsset(nil), c.assets[assetCount:]...)
+}
+
+// SetAssetLocalPath records the local file created for a streamed asset so a
+// later terminal StreamOutput does not need to download the same file again.
+func (c *StreamCollector) SetAssetLocalPath(asset GeneratedAsset, localPath string) bool {
+	if c == nil {
+		return false
+	}
+	key := generationResultKey(asset.Result, asset.EventType, 0)
+	index, exists := c.assetIndex[key]
+	if !exists {
+		return false
+	}
+	c.assets[index].Result.LocalPath = strings.TrimSpace(localPath)
+	return true
+}
+
 func (c *StreamCollector) setMetadata(event *StreamEvent) {
 	if value := firstNonEmpty(event.EventID, event.Data.EventID); value != "" {
 		c.eventID = value

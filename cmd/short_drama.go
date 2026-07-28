@@ -38,6 +38,7 @@ func newShortDramaStartCommand(stdout, stderr io.Writer, deps *dependencies) *co
 	var videoModelCode string
 	var downloadDir string
 	var raw bool
+	var liveAssets bool
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Create a conversation and submit its first short-drama turn",
@@ -59,14 +60,14 @@ func newShortDramaStartCommand(stdout, stderr io.Writer, deps *dependencies) *co
 			if err != nil {
 				return err
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, prompt, options, 0, raw, true)
+			result, err := runStreamWithRecovery(cmd.Context(), stdout, stderr, deps, conversationID, prompt, options, 0, streamRunOptions{raw: raw, liveAssets: liveAssets, downloadDir: downloadDir}, true)
 			if err != nil {
 				return fmt.Errorf("短剧会话 %q 的首轮提交失败；可用 pavo short-drama resume --conversation-id %q 恢复：%w", conversationID, conversationID, err)
 			}
 			if err := downloadStreamResults(cmd.Context(), deps, result, downloadDir); err != nil {
 				return err
 			}
-			return output.WriteJSON(stdout, result)
+			return writeStreamResult(stdout, result, liveAssets)
 		},
 	}
 	cmd.SetOut(stdout)
@@ -78,6 +79,7 @@ func newShortDramaStartCommand(stdout, stderr io.Writer, deps *dependencies) *co
 	flags.StringVar(&videoModelCode, "video-model-code", defaultShortDramaVideoModel, "video model code used by the short-drama agent")
 	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
+	flags.BoolVar(&liveAssets, "live-assets", false, "write each completed image or video as asset_ready JSONL to stdout")
 	return cmd
 }
 
@@ -89,6 +91,7 @@ func newShortDramaReplyCommand(stdout, stderr io.Writer, deps *dependencies) *co
 	var videoModelCode string
 	var downloadDir string
 	var raw bool
+	var liveAssets bool
 	cmd := &cobra.Command{
 		Use:   "reply",
 		Short: "Submit the next turn in an existing short-drama conversation",
@@ -110,14 +113,14 @@ func newShortDramaReplyCommand(stdout, stderr io.Writer, deps *dependencies) *co
 			if err != nil {
 				return err
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, prompt, options, 0, raw, true)
+			result, err := runStreamWithRecovery(cmd.Context(), stdout, stderr, deps, conversationID, prompt, options, 0, streamRunOptions{raw: raw, liveAssets: liveAssets, downloadDir: downloadDir}, true)
 			if err != nil {
 				return err
 			}
 			if err := downloadStreamResults(cmd.Context(), deps, result, downloadDir); err != nil {
 				return err
 			}
-			return output.WriteJSON(stdout, result)
+			return writeStreamResult(stdout, result, liveAssets)
 		},
 	}
 	cmd.SetOut(stdout)
@@ -130,6 +133,7 @@ func newShortDramaReplyCommand(stdout, stderr io.Writer, deps *dependencies) *co
 	flags.StringVar(&videoModelCode, "video-model-code", defaultShortDramaVideoModel, "video model code used by the short-drama agent")
 	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
+	flags.BoolVar(&liveAssets, "live-assets", false, "write each completed image or video as asset_ready JSONL to stdout")
 	return cmd
 }
 
@@ -138,6 +142,7 @@ func newShortDramaResumeCommand(stdout, stderr io.Writer, deps *dependencies) *c
 	var fromSeq int64
 	var downloadDir string
 	var raw bool
+	var liveAssets bool
 	cmd := &cobra.Command{
 		Use:   "resume",
 		Short: "Reconnect to an active short-drama turn without submitting another reply",
@@ -150,14 +155,14 @@ func newShortDramaResumeCommand(stdout, stderr io.Writer, deps *dependencies) *c
 			if fromSeq < 0 {
 				return errors.New("from_seq 不能为负数")
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, "", api.StreamOptions{}, fromSeq, raw, false)
+			result, err := runStreamWithRecovery(cmd.Context(), stdout, stderr, deps, conversationID, "", api.StreamOptions{}, fromSeq, streamRunOptions{raw: raw, liveAssets: liveAssets, downloadDir: downloadDir}, false)
 			if err != nil {
 				return err
 			}
 			if err := downloadStreamResults(cmd.Context(), deps, result, downloadDir); err != nil {
 				return err
 			}
-			return output.WriteJSON(stdout, result)
+			return writeStreamResult(stdout, result, liveAssets)
 		},
 	}
 	cmd.SetOut(stdout)
@@ -167,6 +172,7 @@ func newShortDramaResumeCommand(stdout, stderr io.Writer, deps *dependencies) *c
 	flags.Int64Var(&fromSeq, "from-seq", 0, "only replay events with seq greater than this value")
 	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
+	flags.BoolVar(&liveAssets, "live-assets", false, "write each completed image or video as asset_ready JSONL to stdout")
 	return cmd
 }
 
