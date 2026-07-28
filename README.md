@@ -1,10 +1,12 @@
 # PAVO CLI
 
-PAVO 桌面端 Agent 配套 CLI。项目只提供三项业务能力：
+PAVO 桌面端 Agent 配套 CLI。项目提供五项业务能力：
 
 1. 邮箱密码登录。
 2. 创建 conversation。
 3. 以固定 `design` mode 发起并读取生成流。
+4. 上传聊天附件并获取可展示的公共地址。
+5. 将已生成的图片或视频 URL 下载为本地文件。
 
 仓库同时包含 `skills/pavo/`，npm 安装和更新时会把 PAVO Skill 安装到桌面端 Agent 的全局技能目录。
 
@@ -91,6 +93,29 @@ pavo stream \
   --prompt "生成美女图"
 ```
 
+传入本地参考图或其他聊天附件时，可重复使用 `--file`。CLI 会先上传每个文件，并把服务返回的公共地址写入 stream 请求的 `files` 字段：
+
+```bash
+pavo stream \
+  --conversation-id "340324305581772800" \
+  --prompt "头发改为红色" \
+  --file "C:\\path\\to\\Image1.jpg"
+```
+
+对应请求包含：
+
+```json
+{
+  "files": [
+    {
+      "mime_type": "image/jpeg",
+      "url": "https://cos-aigc-default-test.kiwiar.com/pixa/chat_attachment/.../Image1.jpg",
+      "filename": "Image1.jpg"
+    }
+  ]
+}
+```
+
 请求中的 mode 固定为 `design`：
 
 ```json
@@ -128,9 +153,48 @@ CLI 兼容 SSE 和连续 JSON/NDJSON 响应。过程事件写入 stderr，收到
 
 需要诊断服务端事件时可添加 `--raw`，原始事件仍写入 stderr。
 
+## 下载生成结果
+
+`stream` 默认只返回结果 URL，不会写入本地磁盘。当用户明确要求下载、保存、导出，或后续步骤需要使用本地图片/视频文件时，再调用下载命令：
+
+```bash
+pavo download-result \
+  --url "https://example.test/image.jpg" \
+  --output-path "C:\\output\\image.jpg"
+```
+
+目标路径必须包含文件名。下载会先写入同目录临时文件，成功后再替换目标文件，避免生成半个文件。默认已有同名文件会跳过：
+
+```json
+{
+  "output_path": "C:\\output\\image.jpg",
+  "already_exist": ["C:\\output\\image.jpg"]
+}
+```
+
+如服务端提供了资源更新时间，可传入 `--updated-at <Unix 秒级时间戳>`：只有本地文件较旧时才更新。用 `--force` 可无条件覆盖已有文件。
+
+下载使用结果 URL 的公开访问能力，不会向对象存储或 CDN 发送 PAVO Access Token。
+
+## 上传聊天附件
+
+```bash
+pavo upload --file "C:\\path\\to\\Image1.jpg"
+```
+
+CLI 先向 PAVO API 获取预签名上传地址，再直接 PUT 文件到对象存储。预上传请求使用当前登录 Token；对象存储直传不携带 Token。成功后仅输出用于展示或后续业务引用的公共地址，不输出短期有效的签名上传地址：
+
+```json
+{
+  "public_url": "https://cos-aigc-default-test.kiwiar.com/pixa/chat_attachment/.../Image1.jpg",
+  "content_type": "image/jpeg",
+  "filename": "Image1.jpg"
+}
+```
+
 ## 桌面端 Agent Skill
 
-技能文件位于 `skills/pavo/SKILL.md`。Skill 严格按照以下顺序调用 CLI：
+技能文件位于 `skills/pavo/SKILL.md`。生成任务严格按照以下顺序调用 CLI：
 
 ```text
 pavo login
@@ -138,7 +202,9 @@ pavo login
   → pavo stream
 ```
 
-Skill 不会调用其他图像或视频服务，也不会增加下载、编辑、历史记录等未提供的 PAVO 能力。
+Skill 不会调用其他图像或视频服务，也不会增加编辑、历史记录等未提供的 PAVO 能力。它默认交付结果 URL；只有用户明确要求本地文件，或下一步需要本地文件时才调用下载命令。
+
+用户明确要求上传聊天附件时，Skill 会单独调用 `pavo upload --file <本地路径>` 并返回其 `public_url`。生成时提供本地附件时，Skill 会把路径传给可重复的 `pavo stream --file <本地路径>`，由 CLI 自动上传并绑定到请求。
 
 ## 配置
 

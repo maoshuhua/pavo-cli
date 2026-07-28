@@ -17,6 +17,11 @@ const streamMode = "design"
 type EventHandler func(*StreamEvent) error
 
 func (c *Client) Stream(ctx context.Context, conversationID, prompt string, handler EventHandler) (*StreamOutput, error) {
+	return c.StreamWithFiles(ctx, conversationID, prompt, nil, handler)
+}
+
+// StreamWithFiles starts a design generation with optional uploaded chat attachments.
+func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt string, files []ChatAttachment, handler EventHandler) (*StreamOutput, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	prompt = strings.TrimSpace(prompt)
 	if conversationID == "" {
@@ -24,6 +29,10 @@ func (c *Client) Stream(ctx context.Context, conversationID, prompt string, hand
 	}
 	if prompt == "" {
 		return nil, errors.New("prompt 不能为空")
+	}
+	files, err := normalizeChatAttachments(files)
+	if err != nil {
+		return nil, err
 	}
 	requestURL, err := c.resolveURL(c.paths.Stream)
 	if err != nil {
@@ -33,6 +42,7 @@ func (c *Client) Stream(ctx context.Context, conversationID, prompt string, hand
 		ConversationID: ConversationID(conversationID),
 		Prompt:         prompt,
 		Mode:           streamMode,
+		Files:          files,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("编码 stream 请求失败: %w", err)
@@ -152,6 +162,26 @@ func (c *Client) Stream(ctx context.Context, conversationID, prompt string, hand
 		Results:        results,
 		Artifacts:      artifacts,
 	}, nil
+}
+
+func normalizeChatAttachments(files []ChatAttachment) ([]ChatAttachment, error) {
+	if len(files) == 0 {
+		return nil, nil
+	}
+	normalized := make([]ChatAttachment, len(files))
+	for index, file := range files {
+		file.MimeType = strings.TrimSpace(file.MimeType)
+		file.URL = strings.TrimSpace(file.URL)
+		file.Filename = strings.TrimSpace(file.Filename)
+		if file.MimeType == "" || file.URL == "" || file.Filename == "" {
+			return nil, fmt.Errorf("附件 files[%d] 缺少 mime_type、url 或 filename", index)
+		}
+		if err := validateHTTPURL(file.URL, fmt.Sprintf("附件 files[%d].url", index)); err != nil {
+			return nil, err
+		}
+		normalized[index] = file
+	}
+	return normalized, nil
 }
 
 func looksLikeSSE(reader *bufio.Reader) bool {

@@ -13,6 +13,7 @@ const (
 	LoginPath        = "/api/v1/user/login"
 	ConversationPath = "/api/v1/chat/conversation"
 	StreamPath       = "/api/v1/chat/stream"
+	PresignedURLPath = "/api/v1/file/presigned-url"
 
 	EnvAPIBaseURL  = "PAVO_API_BASE_URL"
 	EnvAccessToken = "PAVO_ACCESS_TOKEN"
@@ -34,6 +35,7 @@ type Paths struct {
 	Login        string
 	Conversation string
 	Stream       string
+	PresignedURL string
 }
 
 func Load() *Config {
@@ -51,6 +53,7 @@ func Load() *Config {
 			Login:        LoginPath,
 			Conversation: ConversationPath,
 			Stream:       StreamPath,
+			PresignedURL: PresignedURLPath,
 		},
 	}
 }

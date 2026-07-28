@@ -26,8 +26,10 @@ assert.match(agentMetadata, /\$pavo/);
 
 for (const requiredText of [
   "pavo login",
+  "pavo upload",
   "pavo conversation create",
   "pavo stream",
+  "pavo download-result",
   "GenerationSuccess",
   "mode",
   "design",

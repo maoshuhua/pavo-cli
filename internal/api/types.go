@@ -84,10 +84,38 @@ type CreateConversationData struct {
 	ConversationID ConversationID `json:"conversation_id"`
 }
 
+type PresignedURLRequest struct {
+	Purpose     string `json:"purpose"`
+	ContentType string `json:"content_type"`
+	Filename    string `json:"filename"`
+}
+
+type PresignedURLData struct {
+	UploadURL       string            `json:"upload_url"`
+	PublicURL       string            `json:"public_url"`
+	Method          string            `json:"method"`
+	ExpiresIn       int64             `json:"expires_in"`
+	RequiredHeaders map[string]string `json:"required_headers"`
+}
+
+// FileUploadResult intentionally excludes the temporary signed upload URL.
+type FileUploadResult struct {
+	PublicURL   string `json:"public_url"`
+	ContentType string `json:"content_type"`
+	Filename    string `json:"filename"`
+}
+
 type StreamRequest struct {
-	ConversationID ConversationID `json:"conversation_id"`
-	Prompt         string         `json:"prompt"`
-	Mode           string         `json:"mode"`
+	ConversationID ConversationID   `json:"conversation_id"`
+	Prompt         string           `json:"prompt"`
+	Mode           string           `json:"mode"`
+	Files          []ChatAttachment `json:"files,omitempty"`
+}
+
+type ChatAttachment struct {
+	MimeType string `json:"mime_type"`
+	URL      string `json:"url"`
+	Filename string `json:"filename"`
 }
 
 type GenerationResult struct {

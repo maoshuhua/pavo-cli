@@ -218,6 +218,34 @@ func TestAPIStreamSendsNumericConversationIDAsJSONNumber(t *testing.T) {
 	}
 }
 
+func TestAPIStreamSendsAttachments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body api.StreamRequest
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Files) != 1 || body.Files[0] != (api.ChatAttachment{
+			MimeType: "image/jpeg",
+			URL:      "https://public.example.test/chat/Image1.jpg",
+			Filename: "Image1.jpg",
+		}) {
+			t.Fatalf("files = %#v", body.Files)
+		}
+		_, _ = writer.Write([]byte(successEvent))
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
+	_, err := client.StreamWithFiles(context.Background(), "conversation-1", "prompt", []api.ChatAttachment{{
+		MimeType: " image/jpeg ",
+		URL:      " https://public.example.test/chat/Image1.jpg ",
+		Filename: " Image1.jpg ",
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAPIStreamRequiresGenerationSuccess(t *testing.T) {
 	server := newStreamServer(t, "application/json", func(writer http.ResponseWriter) {
 		_, _ = writer.Write([]byte(`{"data":{},"seq":1,"type":"GenerationStarted"}`))
@@ -235,6 +263,7 @@ func newTestClient(baseURL string, provider api.TokenProvider) *api.Client {
 		Login:        config.LoginPath,
 		Conversation: config.ConversationPath,
 		Stream:       config.StreamPath,
+		PresignedURL: config.PresignedURLPath,
 	}, provider)
 }
 
