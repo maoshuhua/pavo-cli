@@ -185,6 +185,7 @@ type GenerationResult struct {
 	Base64       string `json:"base64,omitempty"`
 	Height       int    `json:"height"`
 	Message      string `json:"message"`
+	LocalPath    string `json:"local_path,omitempty"`
 	Mimetype     string `json:"mimetype"`
 	Ratio        string `json:"ratio"`
 	Success      bool   `json:"success"`

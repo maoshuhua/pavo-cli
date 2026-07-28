@@ -101,7 +101,7 @@ pavo conversation result --conversation-id "CONVERSATION_ID"
 
 ## Download a generated result
 
-By default, return each successful result's `url`; do not download every result automatically. Download only when the user explicitly asks to download, save, or export the result, when they ask for a local path, or when an approved subsequent task requires the local image or video file.
+By default, return each successful result's `url`; do not download every result automatically. Download only when the user explicitly asks to download, save, or export the result, when they ask for a local path, or when an approved subsequent task requires the local image or video file. Displaying a generated image or video in the desktop chat is such a subsequent task: desktop chat renderers require an absolute local file path and may not render an object-store URL.
 
 ```bash
 pavo download-result \
@@ -111,10 +111,21 @@ pavo download-result \
 
 `--output-path` must include the destination filename. The command returns `downloaded` when it saves the file and `already_exist` when it safely reuses a local file. Pass `--force` only when the user asks to replace an existing local file. If the service supplies a Unix update timestamp for the result, pass it as `--updated-at`; otherwise omit it.
 
+For a `stream` or `resume` result that must be displayed in desktop chat, prefer the built-in local handoff:
+
+```bash
+pavo stream \
+  --conversation-id "CONVERSATION_ID" \
+  --prompt "USER_PROMPT" \
+  --download-dir "ABSOLUTE_TEMP_DIRECTORY"
+```
+
+`--download-dir` downloads every successful result and adds its absolute `local_path` to `results`. Use that local path in the response's image markup. Do not embed the remote `url` as an image when a local path is available. If a generation has already completed and only its `url` is available, call `pavo download-result` before rendering it.
+
 Do not download pending or failed results, an empty URL, or `thumbnail_url` merely for preview. A `base64` result is not a URL download; handle it only if a dedicated local-save capability is added.
 
 ## Return results
 
-Read `results` from the final JSON. Present each successful result's `url`, and use `thumbnail_url` only as a preview when useful. Also preserve the reported `width`, `height`, `ratio`, and `mimetype` when the user needs technical details. When a download occurs, present the returned local output path as well as the result URL.
+Read `results` from the final JSON. When a generated visual is displayed in desktop chat, render its `local_path` and not the remote `url`; retain the URL as an optional link. Use `thumbnail_url` only as a preview when useful. Also preserve the reported `width`, `height`, `ratio`, and `mimetype` when the user needs technical details. When a download occurs, present the returned local output path as well as the result URL.
 
 If login, conversation creation, streaming, resume, or result lookup fails, report the CLI error and stop. Do not manufacture a result or continue with another provider.

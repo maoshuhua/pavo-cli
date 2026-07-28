@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 	var conversationID string
 	var prompt string
 	var filePaths []string
+	var downloadDir string
 	var raw bool
 	cmd := &cobra.Command{
 		Use:   "stream",
@@ -44,6 +47,9 @@ func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 			if err != nil {
 				return err
 			}
+			if err := downloadStreamResults(cmd.Context(), deps, result, downloadDir); err != nil {
+				return err
+			}
 			return output.WriteJSON(stdout, result)
 		},
 	}
@@ -53,6 +59,7 @@ func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 	flags.StringVar(&conversationID, "conversation-id", "", "conversation ID returned by conversation create")
 	flags.StringVar(&prompt, "prompt", "", "generation prompt")
 	flags.StringArrayVar(&filePaths, "file", nil, "local attachment to upload before generation; repeat for multiple files")
+	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
 	return cmd
 }
@@ -80,6 +87,7 @@ func uploadStreamAttachments(ctx context.Context, paths []string, deps *dependen
 func newResumeCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command {
 	var conversationID string
 	var fromSeq int64
+	var downloadDir string
 	var raw bool
 	cmd := &cobra.Command{
 		Use:   "resume",
@@ -97,6 +105,9 @@ func newResumeCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 			if err != nil {
 				return err
 			}
+			if err := downloadStreamResults(cmd.Context(), deps, result, downloadDir); err != nil {
+				return err
+			}
 			return output.WriteJSON(stdout, result)
 		},
 	}
@@ -105,8 +116,48 @@ func newResumeCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 	flags := cmd.Flags()
 	flags.StringVar(&conversationID, "conversation-id", "", "conversation ID to reconnect")
 	flags.Int64Var(&fromSeq, "from-seq", 0, "only replay events with seq greater than this value")
+	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
 	return cmd
+}
+
+// downloadStreamResults saves successful generated assets when the caller
+// requests a local handoff. The stream API intentionally returns remote URLs;
+// this optional step makes them usable by desktop chat renderers that require
+// absolute local file paths.
+func downloadStreamResults(ctx context.Context, deps *dependencies, result *api.StreamOutput, rawDir string) error {
+	downloadDir := strings.TrimSpace(rawDir)
+	if downloadDir == "" || result == nil {
+		return nil
+	}
+	absDir, err := filepath.Abs(downloadDir)
+	if err != nil {
+		return fmt.Errorf("解析下载目录失败: %w", err)
+	}
+	for index := range result.Results {
+		generated := &result.Results[index]
+		if !generated.Success || strings.TrimSpace(generated.URL) == "" {
+			continue
+		}
+		outputPath := filepath.Join(absDir, fmt.Sprintf("result-%d%s", index+1, generatedResultExtension(generated.Mimetype)))
+		if _, err := deps.api.DownloadResult(ctx, api.DownloadResultOptions{
+			URL:        generated.URL,
+			OutputPath: outputPath,
+			Force:      true,
+		}); err != nil {
+			return fmt.Errorf("下载第 %d 个生成结果失败: %w", index+1, err)
+		}
+		generated.LocalPath = outputPath
+	}
+	return nil
+}
+
+func generatedResultExtension(mimetype string) string {
+	extensions, err := mime.ExtensionsByType(strings.TrimSpace(mimetype))
+	if err == nil && len(extensions) > 0 {
+		return extensions[0]
+	}
+	return ".bin"
 }
 
 func runStreamWithRecovery(

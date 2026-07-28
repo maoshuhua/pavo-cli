@@ -16,11 +16,12 @@ assert.strictEqual(
 assert.strictEqual(fs.existsSync(readmePath), true, `missing required file: ${readmePath}`);
 
 const skill = fs.readFileSync(skillPath, "utf8");
+const normalizedSkill = skill.replace(/\r\n/g, "\n");
 const agentMetadata = fs.readFileSync(agentMetadataPath, "utf8");
 const readme = fs.readFileSync(readmePath, "utf8");
 
-assert.match(skill, /^---\n[\s\S]*?^name:\s*pavo$/m);
-assert.doesNotMatch(skill, /^user-invocable:/m);
+assert.match(normalizedSkill, /^---\n[\s\S]*?^name:\s*pavo$/m);
+assert.doesNotMatch(normalizedSkill, /^user-invocable:/m);
 assert.match(agentMetadata, /^interface:$/m);
 assert.match(agentMetadata, /\$pavo/);
 
@@ -33,6 +34,8 @@ for (const requiredText of [
   "GenerationSuccess",
   "mode",
   "design",
+	"--download-dir",
+	"local_path",
 ]) {
   assert.ok(skill.includes(requiredText), `pavo skill missing contract: ${requiredText}`);
 }

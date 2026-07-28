@@ -203,6 +203,15 @@ pavo download-result \
 
 下载使用结果 URL 的公开访问能力，不会向对象存储或 CDN 发送 PAVO Access Token。
 
+如需在 `stream` 或 `resume` 结束后直接交付给需要本地绝对路径的桌面界面，可传入 `--download-dir`。CLI 会下载每个成功结果，并在对应 JSON `results` 项中填入 `local_path`：
+
+```bash
+pavo stream \
+  --conversation-id "CONVERSATION_ID" \
+  --prompt "USER_PROMPT" \
+  --download-dir "C:\\Temp\\pavo-results"
+```
+
 ## 上传聊天附件
 
 ```bash

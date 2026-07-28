@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -156,6 +157,58 @@ func TestCLIStreamDisplaysRawEventsAndReturnsAgentEnd(t *testing.T) {
 	}
 	if result.TerminalType != "AgentEnd" {
 		t.Fatalf("terminal type = %q", result.TerminalType)
+	}
+}
+
+func TestCLIStreamDownloadsSuccessfulResultsToRequestedDirectory(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case config.StreamPath:
+			writer.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = writer.Write([]byte(`{"data":{"results":[{"success":true,"url":"` + serverURL + `/generated.jpg","mimetype":"image/jpeg"}]},"seq":1,"type":"GenerationSuccess"}` + "\n"))
+		case "/generated.jpg":
+			if request.Method != http.MethodGet {
+				t.Fatalf("download method = %s", request.Method)
+			}
+			_, _ = writer.Write([]byte("generated image"))
+		default:
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	t.Setenv(config.EnvAccessToken, "test-token")
+	t.Setenv(config.EnvConfigFile, filepath.Join(t.TempDir(), "config.json"))
+	downloadDir := filepath.Join(t.TempDir(), "generated")
+	var stdout bytes.Buffer
+	root, err := cmd.NewRootCommand(&stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"stream", "--conversation-id", "conversation-1", "--prompt", "生成图片", "--download-dir", downloadDir})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	var result api.StreamOutput
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v; stdout=%q", err, stdout.String())
+	}
+	if len(result.Results) != 1 || result.Results[0].LocalPath == "" {
+		t.Fatalf("result = %#v", result)
+	}
+	if !filepath.IsAbs(result.Results[0].LocalPath) {
+		t.Fatalf("local_path is not absolute: %q", result.Results[0].LocalPath)
+	}
+	content, err := os.ReadFile(result.Results[0].LocalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "generated image" {
+		t.Fatalf("file = %q", content)
 	}
 }
 
