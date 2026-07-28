@@ -1,17 +1,17 @@
 ---
 name: pavo
-description: Use the PAVO CLI to log in, create a conversation, and stream a design generation. Use for PAVO image-generation requests handled by the desktop agent.
+description: Use the PAVO CLI to log in, create or resume a conversation, and retrieve PAVO design-generation results. Use for PAVO image-generation requests handled by the desktop agent.
 ---
 
 # PAVO
 
-Use the bundled `pavo` CLI for PAVO requests. The supported business workflow is strictly:
+Use the bundled `pavo` CLI for PAVO requests. The initial-generation workflow is:
 
 1. `pavo login`
 2. `pavo conversation create`
 3. `pavo stream`
 
-Do not substitute direct `curl` calls, invent other PAVO commands, download results, or call unrelated image/video services.
+For an interrupted or already-running conversation, use `pavo resume`; for a completed conversation whose short stream replay has expired, use `pavo conversation result`. Do not substitute direct `curl` calls, download results, or call unrelated image/video services.
 
 ## Authentication
 
@@ -59,10 +59,33 @@ pavo stream \
 
 The CLI fixes `mode` to `design`. It reads the stream until `GenerationSuccess`, writes progress to stderr, and emits one final JSON object to stdout.
 
+The CLI automatically switches to the existing stream when the service returns `070301` (the conversation already has an active stream), and reconnects after transient stream failures. Do not create a second conversation merely because a stream client disconnects.
+
 Use `--raw` only when diagnosing the PAVO event stream. Raw events are written to stderr so stdout remains machine-readable.
+
+## Resume an interrupted stream
+
+When a prior `pavo stream` invocation was stopped by the desktop environment, preserve its `conversation_id` and reconnect without a prompt or files:
+
+```bash
+pavo resume --conversation-id "CONVERSATION_ID"
+```
+
+Pass `--from-seq LAST_SEQ` only when this process has already handled events through that sequence. Omitting it replays the full currently buffered turn, which is safest after process termination.
+
+## Query a completed conversation
+
+The stream replay buffer is short-lived. For a task that has already completed, use durable conversation data instead of starting another stream:
+
+```bash
+pavo conversation status --conversation-id "CONVERSATION_ID"
+pavo conversation result --conversation-id "CONVERSATION_ID"
+```
+
+`status` reports whether it is still running; `result` emits the newest persisted generated results.
 
 ## Return results
 
 Read `results` from the final JSON. Present each successful result's `url`, and use `thumbnail_url` only as a preview when useful. Also preserve the reported `width`, `height`, `ratio`, and `mimetype` when the user needs technical details.
 
-If login, conversation creation, or streaming fails, report the CLI error and stop. Do not manufacture a result or continue with another provider.
+If login, conversation creation, streaming, resume, or result lookup fails, report the CLI error and stop. Do not manufacture a result or continue with another provider.

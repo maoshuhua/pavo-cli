@@ -21,7 +21,7 @@ func TestCLIBusinessCommandsAreLimitedToProvidedCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"login", "conversation", "stream", "update"} {
+	for _, name := range []string{"login", "conversation", "stream", "resume", "update"} {
 		command, _, findErr := root.Find([]string{name})
 		if findErr != nil || command.Name() != name {
 			t.Fatalf("missing command %q: command=%v err=%v", name, command, findErr)
@@ -156,5 +156,55 @@ func TestCLIStreamDisplaysRawEventsAndReturnsAgentEnd(t *testing.T) {
 	}
 	if result.TerminalType != "AgentEnd" {
 		t.Fatalf("terminal type = %q", result.TerminalType)
+	}
+}
+
+func TestCLIStreamResumesAnAlreadyActiveConversation(t *testing.T) {
+	var streamCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case config.StreamPath:
+			streamCalls++
+			writer.WriteHeader(http.StatusConflict)
+			_, _ = writer.Write([]byte(`{"code":"070301","message":"conversation 338575800850784256 has active stream: request-1"}`))
+		case config.ResumeStreamPath:
+			var body api.ResumeStreamRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.ConversationID != "338575800850784256" || body.FromSeq != 0 {
+				t.Fatalf("resume body = %#v", body)
+			}
+			writer.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = writer.Write([]byte(`{"data":{"results":[{"url":"https://example.test/result.jpg","mimetype":"image/jpeg"}]},"seq":1,"type":"GenerationSuccess"}` + "\n"))
+		default:
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	t.Setenv(config.EnvAccessToken, "test-token")
+	t.Setenv(config.EnvConfigFile, filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root, err := cmd.NewRootCommand(&stdout, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"stream", "--conversation-id", "338575800850784256", "--prompt", "生成图片"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if streamCalls != 1 || !strings.Contains(stderr.String(), "已有生成任务在运行") {
+		t.Fatalf("streamCalls=%d stderr=%s", streamCalls, stderr.String())
+	}
+	var result api.StreamOutput
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v; stdout=%q", err, stdout.String())
+	}
+	if result.TerminalType != "GenerationSuccess" || len(result.Results) != 1 || result.Results[0].URL != "https://example.test/result.jpg" {
+		t.Fatalf("result = %#v", result)
 	}
 }

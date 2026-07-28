@@ -1,4 +1,4 @@
 interface:
   display_name: "PAVO"
-  short_description: "Log in and create PAVO design generations"
+  short_description: "Create, resume, and retrieve PAVO design generations"
   default_prompt: "Use $pavo to create an image from my prompt."

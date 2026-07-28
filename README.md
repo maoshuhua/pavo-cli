@@ -1,10 +1,12 @@
 # PAVO CLI
 
-PAVO 桌面端 Agent 配套 CLI。项目只提供三项业务能力：
+PAVO 桌面端 Agent 配套 CLI。项目提供以下会话生成能力：
 
 1. 邮箱密码登录。
 2. 创建 conversation。
 3. 以固定 `design` mode 发起并读取生成流。
+4. 在客户端断线或重复进入会话时恢复已有生成流。
+5. 查询会话运行状态，并从持久历史读取最终生成结果。
 
 仓库同时包含 `skills/pavo/`，npm 安装和更新时会把 PAVO Skill 安装到桌面端 Agent 的全局技能目录。
 
@@ -101,7 +103,7 @@ pavo stream \
 }
 ```
 
-CLI 兼容 SSE 和连续 JSON/NDJSON 响应。过程事件写入 stderr，收到 `GenerationSuccess` 后在 stdout 输出一个 JSON 对象：
+CLI 兼容 SSE 和连续 JSON/NDJSON 响应。过程事件写入 stderr，收到 `GenerationSuccess` 后在 stdout 输出一个 JSON 对象。普通 API 的超时不会截断生成流；若流连接断开，CLI 会用已接收的最大 `seq` 自动请求恢复流。
 
 ```json
 {
@@ -128,6 +130,29 @@ CLI 兼容 SSE 和连续 JSON/NDJSON 响应。过程事件写入 stderr，收到
 
 需要诊断服务端事件时可添加 `--raw`，原始事件仍写入 stderr。
 
+## 恢复长任务
+
+同一个 `conversation_id` 同时只能有一条生成流。若已有任务在运行，`pavo stream` 会自动改接恢复流，不会重复提交生成。也可以手动恢复：
+
+```bash
+pavo resume --conversation-id "338562408542949376"
+```
+
+如果已处理过部分事件，传入最大的 `seq` 可避免重复事件：
+
+```bash
+pavo resume --conversation-id "338562408542949376" --from-seq 42
+```
+
+生成结束后，服务端的短期回放缓存会过期。此时从持久会话历史取回产物：
+
+```bash
+pavo conversation status --conversation-id "338562408542949376"
+pavo conversation result --conversation-id "338562408542949376"
+```
+
+`status` 返回运行中的 request 信息；`result` 返回最近一轮持久化的图片或视频结果 URL。
+
 ## 桌面端 Agent Skill
 
 技能文件位于 `skills/pavo/SKILL.md`。Skill 严格按照以下顺序调用 CLI：
@@ -136,9 +161,11 @@ CLI 兼容 SSE 和连续 JSON/NDJSON 响应。过程事件写入 stderr，收到
 pavo login
   → pavo conversation create
   → pavo stream
+  → pavo resume（断线或已有 active stream 时）
+  → pavo conversation result（短期回放过期后）
 ```
 
-Skill 不会调用其他图像或视频服务，也不会增加下载、编辑、历史记录等未提供的 PAVO 能力。
+Skill 不会调用其他图像或视频服务，也不会增加下载或编辑等未提供的 PAVO 能力。
 
 ## 配置
 
@@ -147,7 +174,7 @@ Skill 不会调用其他图像或视频服务，也不会增加下载、编辑�
 | `PAVO_API_BASE_URL` | API 基础地址，默认 `https://api-pixa-test.kiwiar.com` |
 | `PAVO_ACCESS_TOKEN` | 临时覆盖本地保存的 Access Token |
 | `PAVO_PASSWORD` | 非交互登录密码 |
-| `PAVO_HTTP_TIMEOUT` | HTTP 和生成流超时，默认 `10m` |
+| `PAVO_HTTP_TIMEOUT` | 登录、上传、创建会话和查询接口超时，默认 `10m`；不限制生成流总时长 |
 | `PAVO_CONFIG_FILE` | 覆盖登录信息文件路径，主要用于测试 |
 | `PAVO_CLI_DISABLE_UPDATE_CHECK=1` | 关闭 npm 版本检查 |
 

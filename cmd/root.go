@@ -75,6 +75,7 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	root.AddCommand(newLoginCommand(stdout, stderr, deps))
 	root.AddCommand(newConversationCommand(stdout, stderr, deps))
 	root.AddCommand(newStreamCommand(stdout, stderr, deps))
+	root.AddCommand(newResumeCommand(stdout, stderr, deps))
 	root.AddCommand(updatecmd.NewCommand(stdout, stderr))
 	localizeFlagErrors(root)
 	return root

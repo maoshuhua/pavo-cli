@@ -10,9 +10,12 @@ const (
 	DefaultBaseURL     = "https://api-pixa-test.kiwiar.com"
 	DefaultHTTPTimeout = 10 * time.Minute
 
-	LoginPath        = "/api/v1/user/login"
-	ConversationPath = "/api/v1/chat/conversation"
-	StreamPath       = "/api/v1/chat/stream"
+	LoginPath               = "/api/v1/user/login"
+	ConversationPath        = "/api/v1/chat/conversation"
+	StreamPath              = "/api/v1/chat/stream"
+	ResumeStreamPath        = "/api/v1/chat/stream/resume"
+	ConversationHistoryPath = "/api/v1/chat/conversation/history"
+	ConversationRunningPath = "/api/v1/chat/conversation/running"
 
 	EnvAPIBaseURL  = "PAVO_API_BASE_URL"
 	EnvAccessToken = "PAVO_ACCESS_TOKEN"
@@ -31,9 +34,12 @@ type Config struct {
 }
 
 type Paths struct {
-	Login        string
-	Conversation string
-	Stream       string
+	Login               string
+	Conversation        string
+	Stream              string
+	ResumeStream        string
+	ConversationHistory string
+	ConversationRunning string
 }
 
 func Load() *Config {
@@ -48,9 +54,12 @@ func Load() *Config {
 		Password:    os.Getenv(EnvPassword),
 		ConfigFile:  strings.TrimSpace(os.Getenv(EnvConfigFile)),
 		Paths: &Paths{
-			Login:        LoginPath,
-			Conversation: ConversationPath,
-			Stream:       StreamPath,
+			Login:               LoginPath,
+			Conversation:        ConversationPath,
+			Stream:              StreamPath,
+			ResumeStream:        ResumeStreamPath,
+			ConversationHistory: ConversationHistoryPath,
+			ConversationRunning: ConversationRunningPath,
 		},
 	}
 }

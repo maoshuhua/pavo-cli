@@ -230,11 +230,79 @@ func TestAPIStreamRequiresGenerationSuccess(t *testing.T) {
 	}
 }
 
+func TestAPIResumeReplaysFromSequenceWithoutSubmittingAnotherGeneration(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != config.ResumeStreamPath {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		var body api.ResumeStreamRequest
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.ConversationID != "338575800850784256" || body.FromSeq != 12 {
+			t.Fatalf("body = %#v", body)
+		}
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: " + successEvent + "\n\n"))
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
+	result, err := client.Resume(context.Background(), "338575800850784256", 12, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TerminalType != "GenerationSuccess" || result.TaskID != "pavo-task-1" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestAPIConversationStatusAndHistoryReturnDurableResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get("Authorization"); got != "Bearer stream-token" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		if got := request.URL.Query().Get("conversation_id"); got != "338575800850784256" {
+			t.Fatalf("conversation_id = %q", got)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case config.ConversationRunningPath:
+			_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{"conversation_id":"338575800850784256","is_running":true,"request_id":"request-1"}}`))
+		case config.ConversationHistoryPath:
+			_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{"is_running":false,"turns":[{"request_id":"request-1","assistant":[{"type":"GenerationSuccess","data":{"results":[{"height":1024,"mimetype":"image/png","ratio":"1:1","url":"https://example.test/result.png","width":1024}]}}]}]}}`))
+		default:
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
+	status, err := client.GetConversationStatus(context.Background(), "338575800850784256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.IsRunning || status.RequestID != "request-1" {
+		t.Fatalf("status = %#v", status)
+	}
+	history, err := client.GetConversationHistory(context.Background(), "338575800850784256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := history.LatestGenerationResults()
+	if len(results) != 1 || results[0].URL != "https://example.test/result.png" {
+		t.Fatalf("results = %#v", results)
+	}
+}
+
 func newTestClient(baseURL string, provider api.TokenProvider) *api.Client {
 	return api.NewClient(baseURL, 5*time.Second, &config.Paths{
-		Login:        config.LoginPath,
-		Conversation: config.ConversationPath,
-		Stream:       config.StreamPath,
+		Login:               config.LoginPath,
+		Conversation:        config.ConversationPath,
+		Stream:              config.StreamPath,
+		ResumeStream:        config.ResumeStreamPath,
+		ConversationHistory: config.ConversationHistoryPath,
+		ConversationRunning: config.ConversationRunningPath,
 	}, provider)
 }
 

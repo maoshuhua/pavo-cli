@@ -90,6 +90,69 @@ type StreamRequest struct {
 	Mode           string         `json:"mode"`
 }
 
+// ResumeStreamRequest reconnects to an in-progress stream. FromSeq is the
+// highest sequence number already processed by the caller; the service only
+// replays events after that point.
+type ResumeStreamRequest struct {
+	ConversationID ConversationID `json:"conversation_id"`
+	FromSeq        int64          `json:"from_seq,omitempty"`
+}
+
+// ConversationStatus is the lightweight real-time status of a conversation.
+type ConversationStatus struct {
+	ConversationID ConversationID `json:"conversation_id"`
+	IsRunning      bool           `json:"is_running"`
+	RequestID      string         `json:"request_id"`
+}
+
+// ConversationHistory is the durable fallback once the short-lived stream
+// replay buffer has expired.
+type ConversationHistory struct {
+	IsRunning bool               `json:"is_running"`
+	Turns     []ConversationTurn `json:"turns"`
+}
+
+type ConversationTurn struct {
+	RequestID string         `json:"request_id"`
+	Assistant []ContentBlock `json:"assistant"`
+}
+
+type ContentBlock struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
+
+// LatestGenerationResults returns the newest persisted generation results in
+// the conversation. The service stores them as GenerationSuccess or
+// GenerationArtifact assistant blocks.
+func (h *ConversationHistory) LatestGenerationResults() []GenerationResult {
+	if h == nil {
+		return nil
+	}
+	for turnIndex := len(h.Turns) - 1; turnIndex >= 0; turnIndex-- {
+		blocks := h.Turns[turnIndex].Assistant
+		for blockIndex := len(blocks) - 1; blockIndex >= 0; blockIndex-- {
+			block := blocks[blockIndex]
+			if block.Type != "GenerationSuccess" && block.Type != "GenerationArtifact" {
+				continue
+			}
+			var payload struct {
+				Results []GenerationResult `json:"results"`
+			}
+			if err := json.Unmarshal(block.Data, &payload); err != nil || len(payload.Results) == 0 {
+				continue
+			}
+			if block.Type == "GenerationArtifact" {
+				for index := range payload.Results {
+					payload.Results[index].Success = true
+				}
+			}
+			return payload.Results
+		}
+	}
+	return nil
+}
+
 type GenerationResult struct {
 	Base64       string `json:"base64,omitempty"`
 	Height       int    `json:"height"`
