@@ -1,11 +1,11 @@
 ---
 name: pavo
-description: Use the PAVO CLI to upload a chat attachment, create or resume a conversation, and retrieve PAVO design-generation results. Use for PAVO image-generation or chat-attachment upload requests handled by the desktop agent.
+description: 使用 PAVO CLI 上传聊天附件、创建或恢复会话，并获取 PAVO 设计生成结果。适用于由桌面代理处理的 PAVO 图像生成或聊天附件上传请求。
 ---
 
 # PAVO
 
-Use the bundled `pavo` CLI for PAVO requests. The supported commands are:
+处理 PAVO 请求时，使用随附的 `pavo` CLI。支持的命令如下：
 
 1. `pavo login`
 2. `pavo upload`
@@ -15,55 +15,55 @@ Use the bundled `pavo` CLI for PAVO requests. The supported commands are:
 6. `pavo conversation status` / `pavo conversation result`
 7. `pavo download-result`
 
-For an initial design generation, use `pavo login` → `pavo conversation create` → `pavo stream`. For an interrupted or already-running conversation, preserve its `conversation_id` and use `pavo resume`; do not create a replacement conversation. Do not substitute direct `curl` calls or call unrelated image/video services.
+首次生成设计时，依次使用 `pavo login` → `pavo conversation create` → `pavo stream`。对于中断或已在运行的会话，请保留其 `conversation_id` 并使用 `pavo resume`；不要创建替代会话。不要改用直接的 `curl` 调用，也不要调用无关的图像或视频服务。
 
-## Authentication
+## 身份验证
 
-Try the requested conversation command first when a stored login may already exist. If the CLI reports that the user is not logged in, obtain the user's PAVO email and password before running login.
+如果可能已存有登录状态，请先尝试用户请求的会话命令。若 CLI 提示用户未登录，请在执行登录前获取用户的 PAVO 邮箱和密码。
 
-Prefer interactive login so the password is hidden:
+优先使用交互式登录，以隐藏密码：
 
 ```bash
 pavo login --email "USER_EMAIL"
 ```
 
-For a non-interactive desktop-agent terminal, use `--password` only when the user explicitly supplied the password for this login:
+对于非交互式桌面代理终端，仅在用户明确提供此次登录所需密码时使用 `--password`：
 
 ```bash
 pavo login --email "USER_EMAIL" --password "USER_PASSWORD"
 ```
 
-Never repeat the password or access token in the response, logs, summaries, or generated files. A successful login prints user information but never prints the access token.
+绝不可在回复、日志、摘要或生成的文件中重复密码或访问令牌。登录成功会输出用户信息，但绝不会输出访问令牌。
 
-## Upload a chat attachment
+## 上传聊天附件
 
-When the user explicitly asks to upload a local PAVO chat attachment, run:
+当用户明确要求上传本地 PAVO 聊天附件时，运行：
 
 ```bash
 pavo upload --file "LOCAL_FILE_PATH"
 ```
 
-Read `public_url` from stdout and return that URL. The CLI handles the authenticated pre-upload request and the unauthenticated object-store PUT; it never prints the temporary signed upload URL.
+从 stdout 读取 `public_url` 并返回该 URL。CLI 会处理需验证的预上传请求及无需验证的对象存储 PUT 请求；它绝不会输出临时签名上传 URL。
 
-## Create a conversation
+## 创建会话
 
-Use the user's generation prompt unchanged:
+原样使用用户的生成提示词：
 
 ```bash
 pavo conversation create --prompt "USER_PROMPT"
 ```
 
-Parse `conversation_id` from the JSON written to stdout:
+从写入 stdout 的 JSON 中解析 `conversation_id`：
 
 ```json
 {"conversation_id":"338562408542949376"}
 ```
 
-The CLI encodes the title in PAVO's required text-part format and fixes `folder_id` to an empty string and `kb_strict` to `false`.
+CLI 会将标题编码为 PAVO 要求的文本分段格式，并将 `folder_id` 固定为空字符串、`kb_strict` 固定为 `false`。
 
-## Stream the generation
+## 流式接收生成结果
 
-Pass the same prompt and the returned conversation ID. When the user provides local reference files, include one `--file` flag for each path; the CLI uploads them and sends the resulting public URLs as `files` in the stream request:
+传入相同的提示词和返回的会话 ID。若用户提供本地参考文件，请为每个路径添加一个 `--file` 标志；CLI 会上传这些文件，并将生成的公开 URL 作为流式请求中的 `files` 发送：
 
 ```bash
 pavo stream \
@@ -72,36 +72,36 @@ pavo stream \
   --file "LOCAL_FILE_PATH"
 ```
 
-The CLI fixes `mode` to `design`. It reads the stream until `GenerationSuccess`, writes progress to stderr, and emits one final JSON object to stdout. Omit `--file` when there is no attachment; repeat it for multiple local attachments.
+CLI 会将 `mode` 固定为 `design`。它会持续读取流直到 `GenerationSuccess`，将进度写入 stderr，并向 stdout 输出一个最终 JSON 对象。没有附件时省略 `--file`；有多个本地附件时重复使用该标志。
 
-If the service reports `070301` (there is already an active stream) or a transient stream failure occurs, the CLI switches to the existing stream and reconnects automatically. Do not create a second conversation merely because a stream client disconnects.
+如果服务返回 `070301`（已有活动流），或者发生暂时性的流传输失败，CLI 会切换到现有流并自动重连。不要仅因流客户端断开就创建第二个会话。
 
-Use `--raw` only when diagnosing the PAVO event stream. Raw events are written to stderr so stdout remains machine-readable.
+仅在诊断 PAVO 事件流时使用 `--raw`。原始事件会写入 stderr，从而保持 stdout 可由机器解析。
 
-## Resume an interrupted stream
+## 恢复中断的流
 
-If the desktop environment stopped a prior `pavo stream` process, reconnect to the existing task without resubmitting its prompt or attachments:
+如果桌面环境停止了先前的 `pavo stream` 进程，请重新连接到现有任务，无需重新提交提示词或附件：
 
 ```bash
 pavo resume --conversation-id "CONVERSATION_ID"
 ```
 
-Pass `--from-seq LAST_SEQ` only when this process has already handled events through that sequence. Otherwise omit it to replay the full buffered turn.
+仅当当前进程已处理至该序号的事件时，才传入 `--from-seq LAST_SEQ`。否则省略该参数，以回放完整的已缓冲轮次。
 
-## Query status and completed results
+## 查询状态和已完成的结果
 
-The short stream replay buffer eventually expires. For a completed generation, query the durable conversation data:
+短期的流回放缓冲区最终会过期。对于已完成的生成，请查询持久化的会话数据：
 
 ```bash
 pavo conversation status --conversation-id "CONVERSATION_ID"
 pavo conversation result --conversation-id "CONVERSATION_ID"
 ```
 
-`status` returns `is_running`; `result` returns the newest persisted generated results. If results include a successful URL, return that URL before considering a new generation.
+`status` 返回 `is_running`；`result` 返回最新持久化的生成结果。如果结果中包含成功的 URL，请先返回该 URL，再考虑新的生成。
 
-## Download a generated result
+## 下载生成结果
 
-By default, return each successful result's `url`; do not download every result automatically. Download only when the user explicitly asks to download, save, or export the result, when they ask for a local path, or when an approved subsequent task requires the local image or video file. Displaying a generated image or video in the desktop chat is such a subsequent task: desktop chat renderers require an absolute local file path and may not render an object-store URL.
+默认返回每个成功结果的 `url`；不要自动下载所有结果。仅在用户明确要求下载、保存或导出结果、要求本地路径，或获准的后续任务需要本地图像或视频文件时下载。在桌面聊天中展示生成的图像或视频就是这样的后续任务：桌面聊天渲染器需要绝对本地文件路径，可能无法渲染对象存储 URL。
 
 ```bash
 pavo download-result \
@@ -109,9 +109,9 @@ pavo download-result \
   --output-path "LOCAL_OUTPUT_FILE"
 ```
 
-`--output-path` must include the destination filename. The command returns `downloaded` when it saves the file and `already_exist` when it safely reuses a local file. Pass `--force` only when the user asks to replace an existing local file. If the service supplies a Unix update timestamp for the result, pass it as `--updated-at`; otherwise omit it.
+`--output-path` 必须包含目标文件名。命令保存文件时返回 `downloaded`，安全复用本地文件时返回 `already_exist`。仅在用户要求替换现有本地文件时传入 `--force`。如果服务为结果提供 Unix 更新时间戳，请将其作为 `--updated-at` 传入；否则省略。
 
-For a `stream` or `resume` result that must be displayed in desktop chat, prefer the built-in local handoff:
+对于必须在桌面聊天中展示的 `stream` 或 `resume` 结果，优先使用内置的本地交接方式：
 
 ```bash
 pavo stream \
@@ -120,12 +120,12 @@ pavo stream \
   --download-dir "ABSOLUTE_TEMP_DIRECTORY"
 ```
 
-`--download-dir` downloads every successful result and adds its absolute `local_path` to `results`. Use that local path in the response's image markup. Do not embed the remote `url` as an image when a local path is available. If a generation has already completed and only its `url` is available, call `pavo download-result` before rendering it.
+`--download-dir` 会下载每个成功结果，并将其绝对 `local_path` 添加到 `results`。在回复的图像标记中使用该本地路径。若本地路径可用，不要将远程 `url` 嵌入为图像。如果生成已完成且仅有其 `url` 可用，请先调用 `pavo download-result` 再渲染它。
 
-Do not download pending or failed results, an empty URL, or `thumbnail_url` merely for preview. A `base64` result is not a URL download; handle it only if a dedicated local-save capability is added.
+不要仅为了预览而下载待处理或失败的结果、空 URL 或 `thumbnail_url`。`base64` 结果不是 URL 下载；仅在增加专用的本地保存能力后再处理它。
 
-## Return results
+## 返回结果
 
-Read `results` from the final JSON. When a generated visual is displayed in desktop chat, render its `local_path` and not the remote `url`; retain the URL as an optional link. Use `thumbnail_url` only as a preview when useful. Also preserve the reported `width`, `height`, `ratio`, and `mimetype` when the user needs technical details. When a download occurs, present the returned local output path as well as the result URL.
+从最终 JSON 中读取 `results`。在桌面聊天中展示生成的视觉内容时，渲染其 `local_path` 而不是远程 `url`；可将 URL 保留为可选链接。仅在有用时使用 `thumbnail_url` 作为预览。用户需要技术细节时，同时保留报告的 `width`、`height`、`ratio` 和 `mimetype`。发生下载时，同时提供返回的本地输出路径和结果 URL。
 
-If login, conversation creation, streaming, resume, or result lookup fails, report the CLI error and stop. Do not manufacture a result or continue with another provider.
+如果登录、创建会话、流式传输、恢复或查询结果失败，请报告 CLI 错误并停止。不要伪造结果，也不要继续使用其他提供方。
