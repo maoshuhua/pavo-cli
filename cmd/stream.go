@@ -43,7 +43,10 @@ func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 			if err != nil {
 				return err
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, prompt, attachments, 0, raw, true)
+			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, prompt, api.StreamOptions{
+				Mode:  api.StreamModeDesign,
+				Files: attachments,
+			}, 0, raw, true)
 			if err != nil {
 				return err
 			}
@@ -101,7 +104,7 @@ func newResumeCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 			if fromSeq < 0 {
 				return errors.New("from_seq 不能为负数")
 			}
-			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, "", nil, fromSeq, raw, false)
+			result, err := runStreamWithRecovery(cmd.Context(), stderr, deps, conversationID, "", api.StreamOptions{}, fromSeq, raw, false)
 			if err != nil {
 				return err
 			}
@@ -166,7 +169,7 @@ func runStreamWithRecovery(
 	deps *dependencies,
 	conversationID string,
 	prompt string,
-	attachments []api.ChatAttachment,
+	streamOptions api.StreamOptions,
 	fromSeq int64,
 	raw bool,
 	start bool,
@@ -188,7 +191,7 @@ func runStreamWithRecovery(
 		if resume {
 			result, err = deps.api.Resume(ctx, conversationID, lastSeq, handler)
 		} else {
-			result, err = deps.api.StreamWithFiles(ctx, conversationID, prompt, attachments, handler)
+			result, err = deps.api.StreamWithOptions(ctx, conversationID, prompt, streamOptions, handler)
 		}
 		if err == nil {
 			return result, nil

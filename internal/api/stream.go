@@ -13,8 +13,6 @@ import (
 	"strings"
 )
 
-const streamMode = "design"
-
 type EventHandler func(*StreamEvent) error
 
 var ErrStreamEndedWithoutTerminal = errors.New("stream 已结束，但没有收到 GenerationSuccess 或 AgentEnd")
@@ -30,11 +28,23 @@ func IsRecoverableStreamError(err error) bool {
 }
 
 func (c *Client) Stream(ctx context.Context, conversationID, prompt string, handler EventHandler) (*StreamOutput, error) {
-	return c.StreamWithFiles(ctx, conversationID, prompt, nil, handler)
+	return c.StreamWithOptions(ctx, conversationID, prompt, StreamOptions{
+		Mode: StreamModeDesign,
+	}, handler)
 }
 
 // StreamWithFiles starts a design generation with optional uploaded chat attachments.
 func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt string, files []ChatAttachment, handler EventHandler) (*StreamOutput, error) {
+	return c.StreamWithOptions(ctx, conversationID, prompt, StreamOptions{
+		Mode:  StreamModeDesign,
+		Files: files,
+	}, handler)
+}
+
+// StreamWithOptions starts a streamed PAVO turn with an explicit agent mode.
+// It is used by the short-drama command to send mode=short_drama together with
+// the model codes required by the PAVO short-drama service.
+func (c *Client) StreamWithOptions(ctx context.Context, conversationID, prompt string, options StreamOptions, handler EventHandler) (*StreamOutput, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	prompt = strings.TrimSpace(prompt)
 	if conversationID == "" {
@@ -43,15 +53,24 @@ func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt str
 	if prompt == "" {
 		return nil, errors.New("prompt 不能为空")
 	}
-	files, err := normalizeChatAttachments(files)
+	mode := strings.TrimSpace(string(options.Mode))
+	if mode == "" {
+		return nil, errors.New("mode 不能为空")
+	}
+	files, err := normalizeChatAttachments(options.Files)
+	if err != nil {
+		return nil, err
+	}
+	extraContext, err := normalizeStreamExtraContext(options.ExtraContext)
 	if err != nil {
 		return nil, err
 	}
 	return c.openStream(ctx, c.paths.Stream, conversationID, StreamRequest{
 		ConversationID: ConversationID(conversationID),
 		Prompt:         prompt,
-		Mode:           streamMode,
+		Mode:           mode,
 		Files:          files,
+		ExtraContext:   extraContext,
 	}, handler)
 }
 
@@ -218,6 +237,23 @@ func normalizeChatAttachments(files []ChatAttachment) ([]ChatAttachment, error) 
 		normalized[index] = file
 	}
 	return normalized, nil
+}
+
+func normalizeStreamExtraContext(extraContext *StreamExtraContext) (*StreamExtraContext, error) {
+	if extraContext == nil {
+		return nil, nil
+	}
+	if extraContext.AgentParams == nil {
+		return nil, errors.New("extra_context.agent_params 不能为空")
+	}
+	params := &StreamAgentParams{
+		ImageModelCode: strings.TrimSpace(extraContext.AgentParams.ImageModelCode),
+		VideoModelCode: strings.TrimSpace(extraContext.AgentParams.VideoModelCode),
+	}
+	if params.ImageModelCode == "" || params.VideoModelCode == "" {
+		return nil, errors.New("extra_context.agent_params 需要 image_model_code 和 video_model_code")
+	}
+	return &StreamExtraContext{AgentParams: params}, nil
 }
 
 func looksLikeSSE(reader *bufio.Reader) bool {

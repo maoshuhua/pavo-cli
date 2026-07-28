@@ -1,0 +1,4 @@
+interface:
+  display_name: "PAVO 通用设计"
+  short_description: "创建、恢复与获取 PAVO 通用设计生成"
+  default_prompt: "使用 $pavo-skill 根据我的提示词创建图片。"

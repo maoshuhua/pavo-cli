@@ -1,0 +1,4 @@
+interface:
+  display_name: "PAVO 短剧"
+  short_description: "创建、续写与恢复 PAVO 多轮短剧创作"
+  default_prompt: "使用 $short-drama 根据我的创意创作一部短剧。"

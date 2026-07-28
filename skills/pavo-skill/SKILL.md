@@ -1,11 +1,13 @@
 ---
-name: pavo
-description: 使用 PAVO CLI 上传聊天附件、创建或恢复会话，并获取 PAVO 设计生成结果。适用于由桌面代理处理的 PAVO 图像生成或聊天附件上传请求。
+name: pavo-skill
+description: 使用 PAVO CLI 上传聊天附件、创建或恢复通用设计会话，并获取 PAVO 图像或视频生成结果。适用于由桌面代理处理的 PAVO 设计生成、设计编辑或聊天附件上传请求；不用于短剧创作、短剧续写或短剧流程确认，此类请求使用 short-drama skill。
 ---
 
-# PAVO
+# PAVO 通用设计
 
 处理 PAVO 请求时，使用随附的 `pavo` CLI。支持的命令如下：
+
+短剧是独立工作流。用户要求创作短剧、续写短剧、确认短剧剧情或继续短剧会话时，使用 `$short-drama`，不要调用本 skill 的 `pavo stream`。
 
 1. `pavo login`
 2. `pavo upload`

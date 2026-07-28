@@ -22,13 +22,13 @@ func TestCLIBusinessCommandsAreLimitedToProvidedCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"login", "conversation", "stream", "resume", "upload", "download-result", "update"} {
+	for _, name := range []string{"login", "conversation", "stream", "short-drama", "resume", "upload", "download-result", "update"} {
 		command, _, findErr := root.Find([]string{name})
 		if findErr != nil || command.Name() != name {
 			t.Fatalf("missing command %q: command=%v err=%v", name, command, findErr)
 		}
 	}
-	for _, removed := range []string{"generate-image", "generate-video", "short-drama", "get-thread"} {
+	for _, removed := range []string{"generate-image", "generate-video", "get-thread"} {
 		command, _, findErr := root.Find([]string{removed})
 		if findErr == nil && command.Name() == removed {
 			t.Fatalf("unexpected legacy command %q", removed)

@@ -1,4 +1,0 @@
-interface:
-  display_name: "PAVO"
-  short_description: "Create, resume, and retrieve PAVO design generations"
-  default_prompt: "Use $pavo to create an image from my prompt."

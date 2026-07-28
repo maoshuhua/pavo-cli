@@ -246,6 +246,40 @@ func TestAPIStreamSendsAttachments(t *testing.T) {
 	}
 }
 
+func TestAPIStreamWithOptionsSendsShortDramaContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != config.StreamPath {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		var body api.StreamRequest
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.ConversationID != "340407156788563968" || body.Prompt != "南京宣传片" || body.Mode != "short_drama" {
+			t.Fatalf("body = %#v", body)
+		}
+		if body.ExtraContext == nil || body.ExtraContext.AgentParams == nil ||
+			body.ExtraContext.AgentParams.ImageModelCode != "agnes-image" ||
+			body.ExtraContext.AgentParams.VideoModelCode != "agnes-video" {
+			t.Fatalf("extra_context = %#v", body.ExtraContext)
+		}
+		_, _ = writer.Write([]byte(successEvent))
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
+	_, err := client.StreamWithOptions(context.Background(), "340407156788563968", "南京宣传片", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+		ExtraContext: &api.StreamExtraContext{AgentParams: &api.StreamAgentParams{
+			ImageModelCode: "agnes-image",
+			VideoModelCode: "agnes-video",
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAPIStreamRequiresGenerationSuccess(t *testing.T) {
 	server := newStreamServer(t, "application/json", func(writer http.ResponseWriter) {
 		_, _ = writer.Write([]byte(`{"data":{},"seq":1,"type":"GenerationStarted"}`))

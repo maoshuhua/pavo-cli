@@ -105,11 +105,41 @@ type FileUploadResult struct {
 	Filename    string `json:"filename"`
 }
 
+// StreamMode is the PAVO agent mode selected for a streamed turn.
+type StreamMode string
+
+const (
+	StreamModeDesign     StreamMode = "design"
+	StreamModeShortDrama StreamMode = "short_drama"
+)
+
+// StreamOptions configures one new streamed turn. Resume calls never reuse
+// these fields because they reconnect to an already submitted turn.
+type StreamOptions struct {
+	Mode         StreamMode
+	Files        []ChatAttachment
+	ExtraContext *StreamExtraContext
+}
+
+// StreamExtraContext contains optional agent-specific configuration accepted
+// by the PAVO chat stream endpoint.
+type StreamExtraContext struct {
+	AgentParams *StreamAgentParams `json:"agent_params,omitempty"`
+}
+
+// StreamAgentParams selects the image and video models used by a short-drama
+// turn. Both model codes are required whenever agent_params is sent.
+type StreamAgentParams struct {
+	ImageModelCode string `json:"image_model_code,omitempty"`
+	VideoModelCode string `json:"video_model_code,omitempty"`
+}
+
 type StreamRequest struct {
-	ConversationID ConversationID   `json:"conversation_id"`
-	Prompt         string           `json:"prompt"`
-	Mode           string           `json:"mode"`
-	Files          []ChatAttachment `json:"files,omitempty"`
+	ConversationID ConversationID      `json:"conversation_id"`
+	Prompt         string              `json:"prompt"`
+	Mode           string              `json:"mode"`
+	Files          []ChatAttachment    `json:"files,omitempty"`
+	ExtraContext   *StreamExtraContext `json:"extra_context,omitempty"`
 }
 
 type ChatAttachment struct {
