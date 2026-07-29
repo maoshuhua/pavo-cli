@@ -65,6 +65,10 @@ for (const requiredText of [
   "--live-assets",
   "asset_ready",
   "complete",
+  "seedream5-0-pro",
+  "gpt-image-2",
+  "seedance-2-0-mini",
+  "seedance-1-5-pro",
 ]) {
   assert.ok(shortDramaSkill.includes(requiredText), `short-drama skill missing contract: ${requiredText}`);
 }

@@ -26,6 +26,49 @@ pavo short-drama start --prompt "USER_PROMPT"
 
 默认从 stdout 的最终 JSON 记录并向用户返回 `conversation_id`。优先读取 `assistant_text`（完整服务端文本）、`assistant_messages` 和 `review`，将服务端给出的剧本、角色、场景或确认详情完整展示给用户；不要只做一句概括。过程事件会写入 stderr，仅用于诊断。
 
+## 模型选择
+
+默认使用 `agnes-image` 与 `agnes-video`。用户未要求选择或切换模型时，不要主动展示模型表，也不要自行替换默认值。
+
+用户明确要求选择、比较或切换图像/视频模型时，展示下表并让用户分别选择一项图像模型和一项视频模型；不要代替用户决定。仅使用表中的 code，不要编造其他 code。服务端若返回模型不可用、无权限或不支持的错误，如实报告并等待用户重新选择。
+
+图像模型：
+
+| Code | 名称 |
+| --- | --- |
+| `seedream5-0-pro` | Seedream 5.0 Pro |
+| `nano2-lite` | Nano Banana 2 Lite（Gemini 3.1 Flash Lite Image） |
+| `seedream4-5` | Seedream 4.5 |
+| `seedream4-0` | Seedream 4.0 |
+| `gpt-image-2` | GPT Image 2 |
+| `nanopro` | Nano Banana Pro（Gemini 3 Pro Image） |
+| `nano2` | Nano Banana 2（Gemini 3.1 Flash Image） |
+| `seedream5-0` | Seedream 5.0 Lite |
+| `agnes-image` | Agnes Image（通常对应 Agnes Image 2.1 Flash） |
+
+视频模型：
+
+| Code | 名称 |
+| --- | --- |
+| `seedance-2-0-mini` | Seedance 2.0 Mini |
+| `happyhorse-1-1` | HappyHorse 1.1 |
+| `wan-2-7` | Wan 2.7 |
+| `happyhorse-1-0` | HappyHorse 1.0 |
+| `seedance-2-0-fast` | Seedance 2.0 Fast |
+| `seedance-2-0` | Seedance 2.0 |
+| `agnes-video` | Agnes Video V2.0 |
+| `seedance-1-5-pro` | Seedance 1.5 Pro |
+
+只有 `start` 和 `reply` 可设置模型；`resume` 仅恢复已有任务，不能改模型。选择或切换时，始终显式传递完整的一对 `--image-model-code` 与 `--video-model-code`：
+
+```bash
+pavo short-drama reply \
+  --conversation-id "CONVERSATION_ID" \
+  --prompt "USER_REPLY" \
+  --image-model-code "seedream5-0-pro" \
+  --video-model-code "seedance-2-0"
+```
+
 ## 后续轮次
 
 服务端要求用户补充信息、选择创作方向或确认下一步时，展示当前问题与选项并等待用户回答。不要替用户选择风格、剧情、角色或镜头。收到回答后，使用同一会话 ID：
