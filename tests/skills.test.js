@@ -69,6 +69,7 @@ for (const requiredText of [
   "gpt-image-2",
   "seedance-2-0-mini",
   "seedance-1-5-pro",
+  "仅 `agnes-image` 与 `agnes-video` 免费，其他图像或视频模型均为付费模型",
 ]) {
   assert.ok(shortDramaSkill.includes(requiredText), `short-drama skill missing contract: ${requiredText}`);
 }

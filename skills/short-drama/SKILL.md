@@ -28,36 +28,36 @@ pavo short-drama start --prompt "USER_PROMPT"
 
 ## 模型选择
 
-默认使用 `agnes-image` 与 `agnes-video`。用户未要求选择或切换模型时，不要主动展示模型表，也不要自行替换默认值。
+默认使用免费的 `agnes-image` 与 `agnes-video`。用户未要求选择或切换模型时，不要主动展示模型表，也不要自行替换默认值。
 
-用户明确要求选择、比较或切换图像/视频模型时，展示下表并让用户分别选择一项图像模型和一项视频模型；不要代替用户决定。仅使用表中的 code，不要编造其他 code。服务端若返回模型不可用、无权限或不支持的错误，如实报告并等待用户重新选择。
+用户明确要求选择、比较或切换图像/视频模型时，展示下表并让用户分别选择一项图像模型和一项视频模型；不要代替用户决定。明确告知：仅 `agnes-image` 与 `agnes-video` 免费，其他图像或视频模型均为付费模型。仅使用表中的 code，不要编造其他 code。服务端若返回模型不可用、无权限或不支持的错误，如实报告并等待用户重新选择。
 
 图像模型：
 
-| Code | 名称 |
-| --- | --- |
-| `seedream5-0-pro` | Seedream 5.0 Pro |
-| `nano2-lite` | Nano Banana 2 Lite（Gemini 3.1 Flash Lite Image） |
-| `seedream4-5` | Seedream 4.5 |
-| `seedream4-0` | Seedream 4.0 |
-| `gpt-image-2` | GPT Image 2 |
-| `nanopro` | Nano Banana Pro（Gemini 3 Pro Image） |
-| `nano2` | Nano Banana 2（Gemini 3.1 Flash Image） |
-| `seedream5-0` | Seedream 5.0 Lite |
-| `agnes-image` | Agnes Image（通常对应 Agnes Image 2.1 Flash） |
+| Code | 名称 | 费用 |
+| --- | --- | --- |
+| `seedream5-0-pro` | Seedream 5.0 Pro | 付费 |
+| `nano2-lite` | Nano Banana 2 Lite（Gemini 3.1 Flash Lite Image） | 付费 |
+| `seedream4-5` | Seedream 4.5 | 付费 |
+| `seedream4-0` | Seedream 4.0 | 付费 |
+| `gpt-image-2` | GPT Image 2 | 付费 |
+| `nanopro` | Nano Banana Pro（Gemini 3 Pro Image） | 付费 |
+| `nano2` | Nano Banana 2（Gemini 3.1 Flash Image） | 付费 |
+| `seedream5-0` | Seedream 5.0 Lite | 付费 |
+| `agnes-image` | Agnes Image（通常对应 Agnes Image 2.1 Flash） | 免费 |
 
 视频模型：
 
-| Code | 名称 |
-| --- | --- |
-| `seedance-2-0-mini` | Seedance 2.0 Mini |
-| `happyhorse-1-1` | HappyHorse 1.1 |
-| `wan-2-7` | Wan 2.7 |
-| `happyhorse-1-0` | HappyHorse 1.0 |
-| `seedance-2-0-fast` | Seedance 2.0 Fast |
-| `seedance-2-0` | Seedance 2.0 |
-| `agnes-video` | Agnes Video V2.0 |
-| `seedance-1-5-pro` | Seedance 1.5 Pro |
+| Code | 名称 | 费用 |
+| --- | --- | --- |
+| `seedance-2-0-mini` | Seedance 2.0 Mini | 付费 |
+| `happyhorse-1-1` | HappyHorse 1.1 | 付费 |
+| `wan-2-7` | Wan 2.7 | 付费 |
+| `happyhorse-1-0` | HappyHorse 1.0 | 付费 |
+| `seedance-2-0-fast` | Seedance 2.0 Fast | 付费 |
+| `seedance-2-0` | Seedance 2.0 | 付费 |
+| `agnes-video` | Agnes Video V2.0 | 免费 |
+| `seedance-1-5-pro` | Seedance 1.5 Pro | 付费 |
 
 只有 `start` 和 `reply` 可设置模型；`resume` 仅恢复已有任务，不能改模型。选择或切换时，始终显式传递完整的一对 `--image-model-code` 与 `--video-model-code`：
 
