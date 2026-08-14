@@ -27,7 +27,7 @@ pavo --version
 在 npm Registry 发布前，也可以直接通过 GitHub Release 安装：
 
 ```bash
-npx -y github:maoshuhua/pavo-cli#v0.1.1 install github:maoshuhua/pavo-cli#v0.1.1
+npx -y github:maoshuhua/pavo-cli#v0.1.2 install github:maoshuhua/pavo-cli#v0.1.2
 pavo --version
 ```
 
