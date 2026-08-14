@@ -20,7 +20,7 @@ pavo models --mode generate_video --online-only
 
 输出中的 `code` 是 `--model` 唯一可用的值。`generate_video` 模型的 `modes` 表示支持的视频输入能力：`frames_to_video` 同时支持文生视频和首尾帧生视频，`omni_to_video` 支持图片、视频、音频等全能参考素材。
 
-判断免费模型时只认 `tags[].code == "free"`，不要根据 `subscription_level == 0` 推断免费。`is_online: false` 的模型不可提交。生图未指定模型时沿用默认 `agnes-image`。纯文本视频或有 1–2 张首尾帧图的视频未指定模型时可用默认 `agnes-video-new`；参考视频、参考音频、多于 2 张图片或混合参考素材的任务必须查询并让用户选择含 `omni_to_video` 的模型。不要擅自切换到可能收费的模型。命令提交前仍会实时验证模型及视频模式。
+判断免费模型时只认 `tags[].code == "free"`，不要根据 `subscription_level == 0` 推断免费。`is_online: false` 的模型不可提交。生图未指定模型时沿用默认 `agnes-image`。纯文本视频或明确指定 1–2 张首尾帧图的视频未指定模型时可用默认 `agnes-video-new`。确定使用 `omni_to_video` 时先查询模型目录；若默认模型在线且支持该模式则继续使用，否则让用户从支持该模式的模型中选择。不要擅自切换到可能收费的模型。命令提交前仍会实时验证模型及视频模式。
 
 短剧与设计模式的模型目录也可分别查询：
 
@@ -56,6 +56,17 @@ pavo generate image \
 
 ## 生成或编辑视频
 
+### 判定视频模式
+
+先根据用户对素材的用途判定模式，不要仅按图片数量选择：
+
+- 用户明确要求“首帧”“尾帧”“从这个画面开始”“在两张图之间过渡”，或明确给出首尾帧顺序时，使用 `frames_to_video`。
+- 用户要求参考人物身份、主体、角色、产品、服装、场景、构图或风格，并希望重新创作画面时，使用 `omni_to_video`。例如“参考图中的主体，在沙滩边跳舞”属于参考模式，不属于首帧模式。
+- 参考视频、参考音频、多于 2 张图片或混合参考素材时，使用 `omni_to_video`。
+- 如果无法确定图片是首尾帧还是仅作参考，必须在提交生成任务前询问用户：“这些图片是作为视频首/尾帧，还是只用于参考人物、风格或内容？”收到确认后显式传入对应的 `--video-mode`。
+
+对带 1–2 张图片且用途不明确的任务不要使用 `--video-mode auto`，因为它会优先选择 `frames_to_video`。
+
 `frames_to_video` 同时代表文生视频和首尾帧生视频。纯文生视频不传 `--image`，可直接使用当前默认 `agnes-video-new`：
 
 ```bash
@@ -81,7 +92,7 @@ pavo generate video \
   --sound "false"
 ```
 
-参考视频、参考音频、多于 2 张图片或混合参考素材使用 `omni_to_video`。图片、视频或音频分别使用可重复的 `--image`、`--video`、`--audio`；参数既可为本地路径，也可为 HTTP(S) URL。`--video-mode auto` 对纯文本和 1–2 张首尾帧图片优先选择模型的 `frames_to_video`，其余参考素材选择 `omni_to_video`。`frames_to_video` 不接受 `--video` 或 `--audio`。
+参考模式使用 `omni_to_video`。图片、视频或音频分别使用可重复的 `--image`、`--video`、`--audio`；参数既可为本地路径，也可为 HTTP(S) URL。`frames_to_video` 不接受 `--video` 或 `--audio`。
 
 ## 参数边界
 

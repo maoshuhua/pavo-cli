@@ -35,9 +35,9 @@ assert.strictEqual(fs.existsSync(path.join(repoRoot, "skills", "pavo")), false, 
 const skill = fs.readFileSync(skillPath, "utf8");
 const normalizedSkill = skill.replace(/\r\n/g, "\n");
 const agentMetadata = fs.readFileSync(agentMetadataPath, "utf8");
-const shortDramaSkill = fs.readFileSync(shortDramaSkillPath, "utf8");
+const shortDramaSkill = fs.readFileSync(shortDramaSkillPath, "utf8").replace(/\r\n/g, "\n");
 const shortDramaAgentMetadata = fs.readFileSync(shortDramaAgentMetadataPath, "utf8");
-const mediaSkill = fs.readFileSync(mediaSkillPath, "utf8");
+const mediaSkill = fs.readFileSync(mediaSkillPath, "utf8").replace(/\r\n/g, "\n");
 const mediaAgentMetadata = fs.readFileSync(mediaAgentMetadataPath, "utf8");
 const readme = fs.readFileSync(readmePath, "utf8");
 
@@ -104,6 +104,11 @@ for (const requiredText of [
   "asset_ready",
   "pavo_outputs/",
   'tags[].code == "free"',
+  "参考图中的主体，在沙滩边跳舞",
+  "不要仅按图片数量选择",
+  "必须在提交生成任务前询问用户",
+  "这些图片是作为视频首/尾帧，还是只用于参考人物、风格或内容？",
+  "对带 1–2 张图片且用途不明确的任务不要使用 `--video-mode auto`",
 ]) {
   assert.ok(mediaSkill.includes(requiredText), `media skill missing contract: ${requiredText}`);
 }
