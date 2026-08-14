@@ -18,7 +18,7 @@ description: 使用 PAVO CLI 创建、续写、修改和恢复多轮短剧创作
 
 ## 首次创作
 
-原样传递用户的短剧需求。需要本地参考文件时，为每个文件增加一个 `--file`。命令会创建会话，并以 `mode: "short_drama"`、`extra_context.agent_params.image_model_code: "agnes-image"` 和 `video_model_code: "agnes-video"` 发起首轮请求：
+原样传递用户的短剧需求。需要本地参考文件时，为每个文件增加一个 `--file`。命令会创建会话，并以 `mode: "short_drama"`、`extra_context.agent_params.image_model_code: "agnes-image"` 和 `video_model_code: "agnes-video-new"` 发起首轮请求：
 
 ```bash
 pavo short-drama start --prompt "USER_PROMPT"
@@ -28,36 +28,16 @@ pavo short-drama start --prompt "USER_PROMPT"
 
 ## 模型选择
 
-默认使用免费的 `agnes-image` 与 `agnes-video`。用户未要求选择或切换模型时，不要主动展示模型表，也不要自行替换默认值。
+默认使用 `agnes-image` 与 `agnes-video-new`。用户未要求选择或切换模型时，不要主动展示模型表，也不要自行替换默认值；服务端会在提交时验证可用性。
 
-用户明确要求选择、比较或切换图像/视频模型时，展示下表并让用户分别选择一项图像模型和一项视频模型；不要代替用户决定。明确告知：仅 `agnes-image` 与 `agnes-video` 免费，其他图像或视频模型均为付费模型。仅使用表中的 code，不要编造其他 code。服务端若返回模型不可用、无权限或不支持的错误，如实报告并等待用户重新选择。
+用户明确要求选择、比较或切换模型时，不得使用静态模型表。先动态查询当前已上线的短剧模型：
 
-图像模型：
+```bash
+pavo models --mode short_drama --type image --online-only
+pavo models --mode short_drama --type video --online-only
+```
 
-| Code | 名称 | 费用 |
-| --- | --- | --- |
-| `seedream5-0-pro` | Seedream 5.0 Pro | 付费 |
-| `nano2-lite` | Nano Banana 2 Lite（Gemini 3.1 Flash Lite Image） | 付费 |
-| `seedream4-5` | Seedream 4.5 | 付费 |
-| `seedream4-0` | Seedream 4.0 | 付费 |
-| `gpt-image-2` | GPT Image 2 | 付费 |
-| `nanopro` | Nano Banana Pro（Gemini 3 Pro Image） | 付费 |
-| `nano2` | Nano Banana 2（Gemini 3.1 Flash Image） | 付费 |
-| `seedream5-0` | Seedream 5.0 Lite | 付费 |
-| `agnes-image` | Agnes Image（通常对应 Agnes Image 2.1 Flash） | 免费 |
-
-视频模型：
-
-| Code | 名称 | 费用 |
-| --- | --- | --- |
-| `seedance-2-0-mini` | Seedance 2.0 Mini | 付费 |
-| `happyhorse-1-1` | HappyHorse 1.1 | 付费 |
-| `wan-2-7` | Wan 2.7 | 付费 |
-| `happyhorse-1-0` | HappyHorse 1.0 | 付费 |
-| `seedance-2-0-fast` | Seedance 2.0 Fast | 付费 |
-| `seedance-2-0` | Seedance 2.0 | 付费 |
-| `agnes-video` | Agnes Video V2.0 | 免费 |
-| `seedance-1-5-pro` | Seedance 1.5 Pro | 付费 |
+将查询结果展示给用户，让用户分别选择一个图像模型和一个视频模型，不要代替用户决定。只使用返回的 `code`；判断免费模型时只认 `tags[].code == "free"`，不要用 `subscription_level == 0` 推断免费。服务端若返回模型无权限或不支持，如实报告并等待用户重新选择。
 
 只有 `start` 和 `reply` 可设置模型；`resume` 仅恢复已有任务，不能改模型。选择或切换时，始终显式传递完整的一对 `--image-model-code` 与 `--video-model-code`：
 
@@ -101,10 +81,10 @@ pavo short-drama result --conversation-id "CONVERSATION_ID"
 ```bash
 pavo download-result \
   --url "RESULT_URL" \
-  --output-path "LOCAL_OUTPUT_FILE"
+  --output-path "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/short-drama/CONVERSATION_ID/RESULT_FILE"
 ```
 
-也可在 `start`、`reply` 或 `resume` 中使用 `--download-dir "ABSOLUTE_DIRECTORY"`，让 CLI 为每一张成功图片和每一段成功视频写入绝对 `assets[].result.local_path`（同时兼容填入 `results[].local_path`）。
+所有由本 Skill 保存到本地的附件和生成产物统一放在当前工作区的 `pavo_outputs/` 下，并按短剧会话和阶段建立子目录；只有用户明确指定其他输出路径时才使用该路径。也可在 `start`、`reply` 或 `resume` 中使用 `--download-dir`，让 CLI 为每一张成功图片和每一段成功视频写入绝对 `assets[].result.local_path`（同时兼容填入 `results[].local_path`）。
 
 桌面聊天中需要展示角色图、场景图、关键帧或视频时，必须在该轮命令上传入 `--live-assets --download-dir`，并使用每个阶段独立的绝对目录，例如：
 
@@ -113,13 +93,13 @@ pavo short-drama reply \
   --conversation-id "CONVERSATION_ID" \
   --prompt "USER_REPLY" \
   --live-assets \
-  --download-dir "C:\\pavo\\short-drama\\CONVERSATION_ID\\step-4-character-image"
+  --download-dir "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/short-drama/CONVERSATION_ID/step-4-character-image"
 ```
 
 启用 `--live-assets` 后，stdout 是 JSONL：每收到并下载完成一张图片或一段视频，就会先输出一条 `type: "asset_ready"` 记录。立即展示该记录中 `asset.result.local_path` 的资产，不要等本阶段的其他资产完成。最后一条 `type: "complete"` 的 `result` 包含完整汇总、`assistant_text` 和 `review`；仅在此时展示服务端的确认问题或要求用户选择下一步。不要只展示最后一个结果，也不要只返回远程 URL。
 
 ## 身份验证与失败处理
 
-优先尝试所需命令；若 CLI 提示未登录，再向用户获取 PAVO 邮箱和密码并执行 `pavo login`。不得在回复、日志或生成文件中泄露密码、访问令牌或预签名上传 URL。
+优先尝试所需命令。若 CLI 提示未登录，获取用户手机号与国家码（未指定时用 `86`），运行 `pavo login send-code --country-code "COUNTRY_CODE" --phone-number "PHONE_NUMBER"`。发送成功后等待用户提供本次短信验证码，再运行 `pavo login --country-code "COUNTRY_CODE" --phone-number "PHONE_NUMBER"`；非交互终端仅在用户已明确提供验证码时增加 `--verification-code`。不要猜测或复用验证码，不得在回复、日志或生成文件中泄露验证码、访问令牌或预签名上传 URL。
 
 命令失败时报告 CLI 错误及已知的 `conversation_id`，然后停止；不要伪造结果、不要转用其他提供方、不要因短暂断线创建替代会话。

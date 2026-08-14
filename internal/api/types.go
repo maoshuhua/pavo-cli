@@ -22,13 +22,16 @@ type UserInfo struct {
 	CreatedAt    int64  `json:"created_at"`
 }
 
-type LoginRequest struct {
-	EmailPassword EmailPassword `json:"email_password"`
+type SendPhoneCodeRequest struct {
+	CountryCode string `json:"country_code"`
+	PhoneNumber string `json:"phone_number"`
+	Scene       string `json:"scene"`
 }
 
-type EmailPassword struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+type PhoneOTPLoginRequest struct {
+	CountryCode      string `json:"country_code"`
+	PhoneNumber      string `json:"phone_number"`
+	VerificationCode string `json:"verification_code"`
 }
 
 type LoginData struct {
@@ -110,9 +113,44 @@ type FileUploadResult struct {
 type StreamMode string
 
 const (
-	StreamModeDesign     StreamMode = "design"
-	StreamModeShortDrama StreamMode = "short_drama"
+	StreamModeDesign        StreamMode = "design"
+	StreamModeShortDrama    StreamMode = "short_drama"
+	StreamModeGenerateImage StreamMode = "generate_image"
+	StreamModeGenerateVideo StreamMode = "generate_video"
+	StreamModeFramesToVideo StreamMode = "frames_to_video"
 )
+
+// ModeCode is a mode supported by the model catalogue endpoint.
+type ModeCode string
+
+const (
+	ModeCodeShortDrama    ModeCode = "short_drama"
+	ModeCodeGenerateImage ModeCode = "generate_image"
+	ModeCodeGenerateVideo ModeCode = "generate_video"
+	ModeCodeDesign        ModeCode = "design"
+)
+
+// ModelTag is localized display metadata returned by Pixa.
+type ModelTag struct {
+	Code     string `json:"code"`
+	I18nCode string `json:"i18n_code"`
+	Label    string `json:"label"`
+}
+
+// SupportedModel describes one model currently configured for a Pixa mode.
+// Modes is populated for generate_video and Type for short_drama.
+type SupportedModel struct {
+	Code              string     `json:"code"`
+	Name              string     `json:"name"`
+	ModelIntro        string     `json:"model_intro"`
+	IconURL           string     `json:"icon_url"`
+	IsOnline          bool       `json:"is_online"`
+	ProductName       string     `json:"product_name,omitempty"`
+	SubscriptionLevel float64    `json:"subscription_level"`
+	Type              string     `json:"type,omitempty"`
+	Tags              []ModelTag `json:"tags"`
+	Modes             []string   `json:"modes,omitempty"`
+}
 
 // StreamOptions configures one new streamed turn. Resume calls never reuse
 // these fields because they reconnect to an already submitted turn.
@@ -120,6 +158,29 @@ type StreamOptions struct {
 	Mode         StreamMode
 	Files        []ChatAttachment
 	ExtraContext *StreamExtraContext
+	Creative     *CreativeGenerationOptions
+}
+
+// CreativeGenerationOptions contains the shared Pixa fields used by image,
+// omni-video, and frames-to-video generation. Flexible fields are encoded as
+// raw JSON so the CLI can preserve the API's explicit "auto" value.
+type CreativeGenerationOptions struct {
+	Model              string
+	Ratio              string
+	Resolution         string
+	Duration           json.RawMessage
+	Count              json.RawMessage
+	Sound              json.RawMessage
+	Images             []MediaReference
+	Videos             []MediaReference
+	Audios             []MediaReference
+	CreativePromptJSON string
+}
+
+// MediaReference is the object shape required by Pixa for top-level image,
+// video, and audio references.
+type MediaReference struct {
+	URL string `json:"url"`
 }
 
 // StreamExtraContext contains optional agent-specific configuration accepted
@@ -136,11 +197,21 @@ type StreamAgentParams struct {
 }
 
 type StreamRequest struct {
-	ConversationID ConversationID      `json:"conversation_id"`
-	Prompt         string              `json:"prompt"`
-	Mode           string              `json:"mode"`
-	Files          []ChatAttachment    `json:"files,omitempty"`
-	ExtraContext   *StreamExtraContext `json:"extra_context,omitempty"`
+	ConversationID     ConversationID      `json:"conversation_id"`
+	Prompt             string              `json:"prompt"`
+	Mode               string              `json:"mode"`
+	Model              string              `json:"model,omitempty"`
+	Ratio              string              `json:"ratio,omitempty"`
+	Resolution         string              `json:"resolution,omitempty"`
+	Duration           json.RawMessage     `json:"duration,omitempty"`
+	Count              json.RawMessage     `json:"count,omitempty"`
+	Sound              json.RawMessage     `json:"sound,omitempty"`
+	Images             []MediaReference    `json:"images,omitempty"`
+	Videos             []MediaReference    `json:"videos,omitempty"`
+	Audios             []MediaReference    `json:"audios,omitempty"`
+	CreativePromptJSON string              `json:"creative_prompt_json,omitempty"`
+	Files              []ChatAttachment    `json:"files,omitempty"`
+	ExtraContext       *StreamExtraContext `json:"extra_context,omitempty"`
 }
 
 type ChatAttachment struct {

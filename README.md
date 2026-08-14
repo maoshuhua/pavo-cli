@@ -1,8 +1,8 @@
 # PAVO CLI
 
-PAVO 桌面端 Agent 配套 CLI。项目提供八项业务能力：
+PAVO 桌面端 Agent 配套 CLI。项目提供十项业务能力：
 
-1. 邮箱密码登录。
+1. 通过手机号短信验证码登录。
 2. 创建 conversation。
 3. 以固定 `design` mode 发起并读取通用设计生成流。
 4. 上传聊天附件并获取可展示的公共地址。
@@ -10,8 +10,10 @@ PAVO 桌面端 Agent 配套 CLI。项目提供八项业务能力：
 6. 在客户端断线或重复进入会话时恢复已有生成流。
 7. 查询会话运行状态，并从持久历史读取最终生成结果。
 8. 创建、续写、恢复和查询多轮短剧会话。
+9. 按短剧、生图、生视频或设计模式动态查询当前支持的模型。
+10. 通过 Pixa 创意流生成或编辑基础图像与视频。
 
-仓库同时包含 `skills/pavo-skill/` 与 `skills/short-drama/`。npm 安装和更新时会把两份 PAVO Skill 安装到桌面端 Agent 的全局技能目录。
+仓库同时包含 `skills/pavo-skill/`、`skills/pavo-media-generation/` 与 `skills/short-drama/`。npm 安装和更新时会把三份 PAVO Skill 安装到桌面端 Agent 的全局技能目录。
 
 ## 安装
 
@@ -39,24 +41,46 @@ go build -o pavo .
 
 ## 登录
 
-交互式读取密码，不把密码写入 Shell 历史：
+先发送短信验证码。`--country-code` 默认是 `86`，传值时不带 `+`：
 
 ```bash
-pavo login --email "user@example.com"
+pavo login send-code \
+  --country-code "86" \
+  --phone-number "PHONE_NUMBER"
 ```
 
-桌面端 Agent 的非交互场景可以显式传入密码：
+收到验证码后登录。省略 `--verification-code` 时，CLI 会隐藏读取输入，避免写入 Shell 历史：
 
 ```bash
-pavo login --email "user@example.com" --password "PASSWORD"
+pavo login \
+  --country-code "86" \
+  --phone-number "PHONE_NUMBER"
 ```
 
-也可以通过 `PAVO_PASSWORD` 提供本次登录密码。登录成功后，Access Token 保存在系统用户配置目录的 `pavo/config.json` 中；终端输出和错误日志不会输出 Token。
+桌面端 Agent 的非交互场景，仅在用户已明确提供本次收到的验证码时使用 `--verification-code`，也可通过 `PAVO_VERIFICATION_CODE` 提供。登录成功后，Access Token 保存在系统用户配置目录的 `pavo/config.json` 中；验证码、Token 和预签名 URL 不会出现在命令输出中。
 
-登录接口：
+```bash
+pavo login \
+  --country-code "86" \
+  --phone-number "PHONE_NUMBER" \
+  --verification-code "VERIFICATION_CODE"
+```
+
+验证码与登录接口：
 
 ```http
-POST https://api-pixa-test.kiwiar.com/api/v1/user/login
+POST https://api.pavo-ai.cn/api/v1/user/code/send
+POST https://api.pavo-ai.cn/api/v1/user/auth/phone-otp
+```
+
+CLI 分别发送以下请求体：
+
+```json
+{"country_code":"86","phone_number":"PHONE_NUMBER","scene":"phone_auth"}
+```
+
+```json
+{"country_code":"86","phone_number":"PHONE_NUMBER","verification_code":"VERIFICATION_CODE"}
 ```
 
 ## 创建 conversation
@@ -84,9 +108,87 @@ CLI 自动构造以下请求：
 接口：
 
 ```http
-POST https://api-pixa-test.kiwiar.com/api/v1/chat/conversation
+POST https://api.pavo-ai.cn/api/v1/chat/conversation
 Authorization: Bearer <access_token>
 ```
+
+## 查询支持的模型
+
+模型目录直接来自 Pixa 的实时配置，不随 CLI 版本硬编码。`--mode` 支持 `short_drama`、`generate_image`、`generate_video`、`design`：
+
+```bash
+pavo models --mode generate_image --online-only
+pavo models --mode generate_video --online-only
+pavo models --mode short_drama --type image --online-only
+pavo models --mode short_drama --type video --online-only
+```
+
+接口：
+
+```http
+GET /api/v1/pixa/mode_support_models?mode_code=generate_image
+Authorization: Bearer <access_token>
+```
+
+输出保留模型的 `code`、`name`、`is_online`、`tags`、订阅信息，以及视频模型的 `modes`。其中 `tags[].code == "free"` 才表示免费；不能用 `subscription_level == 0` 代替。`generate_video` 的 `frames_to_video` 同时表示支持文生视频和首尾帧生视频，`omni_to_video` 表示支持图片、视频、音频等全能参考素材。
+
+## 基础图像与视频生成
+
+基础文生图会自动创建 conversation、实时验证模型，并以 `mode: "generate_image"` 发起创意流：
+
+```bash
+pavo generate image \
+  --prompt "美女图" \
+  --model "agnes-image" \
+  --ratio "auto" \
+  --resolution "SD"
+```
+
+编辑参考图时可重复传入本地路径或 HTTP(S) URL。CLI 会自动上传本地素材，并构造 Pixa 所需的 `creative_prompt_json`：
+
+```bash
+pavo generate image \
+  --conversation-id "346482729455452160" \
+  --prompt "美颜下" \
+  --image "C:\\path\\portrait.jpg" \
+  --ratio "9:16" \
+  --resolution "SD"
+```
+
+请求体的关键字段形如：
+
+```json
+{
+  "conversation_id": 346482729455452160,
+  "prompt": "美颜下",
+  "mode": "generate_image",
+  "model": "agnes-image",
+  "ratio": "9:16",
+  "resolution": "SD",
+  "creative_prompt_json": "[{\"type\":\"text\",\"content\":\"美颜下\"}]",
+  "images": [{"url": "https://example.test/portrait.jpg"}]
+}
+```
+
+视频使用 `generate video`。默认模型 `agnes-video-new` 当前属于 `frames_to_video`，既可不传图片进行文生视频，也可传 1 张首帧图或 2 张首尾帧图：
+
+```bash
+pavo generate video \
+  --prompt "让人物自然转身并看向镜头" \
+  --model "agnes-video-new" \
+  --video-mode "frames_to_video" \
+  --image "C:\\path\\first-frame.png" \
+  --ratio "9:16" \
+  --resolution "HD" \
+  --duration "8" \
+  --sound "false"
+```
+
+参考视频、参考音频、多于 2 张图片或混合参考任务，应先从 `pavo models --mode generate_video --online-only` 的结果中选择 `modes` 含 `omni_to_video` 的模型，并传 `--video-mode omni_to_video`。图片、视频和音频参考素材分别使用可重复的 `--image`、`--video`、`--audio`；`--video-mode auto` 对纯文本和 1–2 张首尾帧图片优先选择 `frames_to_video`，其余参考素材选择 `omni_to_video`。
+
+通用参数支持 `ratio=auto`、`resolution=auto`、`count=auto`、`duration=auto` 和 `sound=auto`，以便由服务端按模型能力选择。CLI 对 Agnes 默认模型实施 agnes_core 能力限制：`agnes-image` 仅支持 SD、每次 1 张；`agnes-video-new` 支持 SD/HD 和 5–15 秒。其他模型的精确组合以服务端最新配置为准。
+
+两个生成命令都支持 `--conversation-id` 继续已有会话、`--download-dir` 下载结果，以及 `--live-assets` 逐个输出完成的本地资产。仓库内保存的附件和生成产物统一放在 `pavo_outputs/<任务子目录>/`；用户显式指定其他输出路径时以用户路径为准。断流会沿用现有 `resume` 机制，不会重复提交任务。
 
 ## Stream
 
@@ -158,7 +260,7 @@ CLI 兼容 SSE 和连续 JSON/NDJSON 响应。过程事件写入 stderr，收到
 
 ## 短剧（多轮会话）
 
-短剧通过同一个聊天流接口发送 `mode: "short_drama"`，并在 `extra_context.agent_params` 中指定默认的 `agnes-image` 与 `agnes-video` 模型。首次调用会创建会话并发送首轮需求：
+短剧通过同一个聊天流接口发送 `mode: "short_drama"`，并在 `extra_context.agent_params` 中指定默认的 `agnes-image` 与 `agnes-video-new` 模型。首次调用会创建会话并发送首轮需求：
 
 ```bash
 pavo short-drama start --prompt "制作一支南京宣传片"
@@ -216,15 +318,15 @@ pavo conversation result --conversation-id "338562408542949376"
 ```bash
 pavo download-result \
   --url "https://example.test/image.jpg" \
-  --output-path "C:\\output\\image.jpg"
+  --output-path "C:\\workspace\\pavo_outputs\\task-name\\image.jpg"
 ```
 
 目标路径必须包含文件名。下载会先写入同目录临时文件，成功后再替换目标文件，避免生成半个文件。默认已有同名文件会跳过：
 
 ```json
 {
-  "output_path": "C:\\output\\image.jpg",
-  "already_exist": ["C:\\output\\image.jpg"]
+  "output_path": "C:\\workspace\\pavo_outputs\\task-name\\image.jpg",
+  "already_exist": ["C:\\workspace\\pavo_outputs\\task-name\\image.jpg"]
 }
 ```
 
@@ -238,7 +340,7 @@ pavo download-result \
 pavo stream \
   --conversation-id "CONVERSATION_ID" \
   --prompt "USER_PROMPT" \
-  --download-dir "C:\\Temp\\pavo-results"
+  --download-dir "C:\\workspace\\pavo_outputs\\task-name"
 ```
 
 ## 上传聊天附件
@@ -259,7 +361,7 @@ CLI 先向 PAVO API 获取预签名上传地址，再直接 PUT 文件到对象�
 
 ## 桌面端 Agent Skill
 
-通用设计技能位于 `skills/pavo-skill/SKILL.md`，短剧技能位于 `skills/short-drama/SKILL.md`。
+通用设计技能位于 `skills/pavo-skill/SKILL.md`，基础图像/视频技能位于 `skills/pavo-media-generation/SKILL.md`，短剧技能位于 `skills/short-drama/SKILL.md`。
 
 通用设计任务严格按照以下顺序调用 CLI：
 
@@ -271,6 +373,8 @@ pavo login
 
 `pavo-skill` 不会调用其他图像或视频服务，也不会处理短剧；它默认交付结果 URL，只有用户明确要求本地文件，或下一步需要本地文件时才调用下载命令。
 
+`pavo-media-generation` 使用 `pavo models` 查询实时模型目录，再调用 `pavo generate image` 或 `pavo generate video`。本地参考素材由命令自动上传；生成任务复用统一的流恢复、结果下载和实时资产输出能力。
+
 用户明确要求上传聊天附件时，Skill 会单独调用 `pavo upload --file <本地路径>` 并返回其 `public_url`。生成时提供本地附件时，Skill 会把路径传给可重复的 `pavo stream --file <本地路径>`，由 CLI 自动上传并绑定到请求。
 
 `short-drama` 使用 `pavo short-drama start` 创建首轮短剧会话，用 `pavo short-drama reply` 在相同 `conversation_id` 上继续多轮对话。它只转交用户原始创作需求与服务端问题，不替用户决定剧情、风格、角色或镜头。
@@ -279,9 +383,9 @@ pavo login
 
 | 环境变量 | 说明 |
 | --- | --- |
-| `PAVO_API_BASE_URL` | API 基础地址，默认 `https://api-pixa-test.kiwiar.com` |
+| `PAVO_API_BASE_URL` | API 基础地址，默认 `https://api.pavo-ai.cn` |
 | `PAVO_ACCESS_TOKEN` | 临时覆盖本地保存的 Access Token |
-| `PAVO_PASSWORD` | 非交互登录密码 |
+| `PAVO_VERIFICATION_CODE` | 非交互手机号登录使用的本次短信验证码 |
 | `PAVO_HTTP_TIMEOUT` | HTTP 和生成流超时，默认 `10m` |
 | `PAVO_CONFIG_FILE` | 覆盖登录信息文件路径，主要用于测试 |
 | `PAVO_CLI_DISABLE_UPDATE_CHECK=1` | 关闭 npm 版本检查 |

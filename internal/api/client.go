@@ -20,6 +20,7 @@ type TokenProvider func() (string, error)
 const (
 	pavoPlatform        = "1"
 	pavoUserAgent       = "PAVO-CLI/1.0"
+	phoneAuthScene      = "phone_auth"
 	AgentStreamBusyCode = "070301"
 )
 
@@ -68,19 +69,55 @@ func NewClient(baseURL string, timeout time.Duration, paths *config.Paths, token
 	}
 }
 
-func (c *Client) Login(ctx context.Context, email, password string) (*LoginResult, error) {
-	body := LoginRequest{
-		EmailPassword: EmailPassword{
-			Email:    strings.TrimSpace(email),
-			Password: password,
-		},
+func (c *Client) SendPhoneVerificationCode(ctx context.Context, countryCode, phoneNumber string) error {
+	countryCode = normalizeCountryCode(countryCode)
+	phoneNumber = strings.TrimSpace(phoneNumber)
+	if countryCode == "" {
+		return errors.New("country_code 不能为空")
+	}
+	if phoneNumber == "" {
+		return errors.New("phone_number 不能为空")
+	}
+	body := SendPhoneCodeRequest{
+		CountryCode: countryCode,
+		PhoneNumber: phoneNumber,
+		Scene:       phoneAuthScene,
+	}
+	var response struct {
+		Code    string         `json:"code"`
+		Message string         `json:"message"`
+		Data    map[string]any `json:"data"`
+	}
+	if err := c.doJSON(ctx, http.MethodPost, c.paths.SendPhoneCode, body, false, &response); err != nil {
+		return err
+	}
+	return validateEnvelope(response.Code, response.Message)
+}
+
+func (c *Client) LoginWithPhoneOTP(ctx context.Context, countryCode, phoneNumber, verificationCode string) (*LoginResult, error) {
+	countryCode = normalizeCountryCode(countryCode)
+	phoneNumber = strings.TrimSpace(phoneNumber)
+	verificationCode = strings.TrimSpace(verificationCode)
+	if countryCode == "" {
+		return nil, errors.New("country_code 不能为空")
+	}
+	if phoneNumber == "" {
+		return nil, errors.New("phone_number 不能为空")
+	}
+	if verificationCode == "" {
+		return nil, errors.New("verification_code 不能为空")
+	}
+	body := PhoneOTPLoginRequest{
+		CountryCode:      countryCode,
+		PhoneNumber:      phoneNumber,
+		VerificationCode: verificationCode,
 	}
 	var response struct {
 		Code    string    `json:"code"`
 		Message string    `json:"message"`
 		Data    LoginData `json:"data"`
 	}
-	if err := c.doJSON(ctx, http.MethodPost, c.paths.Login, body, false, &response); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, c.paths.PhoneOTPLogin, body, false, &response); err != nil {
 		return nil, err
 	}
 	if err := validateEnvelope(response.Code, response.Message); err != nil {
@@ -94,6 +131,10 @@ func (c *Client) Login(ctx context.Context, email, password string) (*LoginResul
 		AccessToken: response.Data.AccessToken,
 		UserInfo:    response.Data.UserInfo,
 	}, nil
+}
+
+func normalizeCountryCode(countryCode string) string {
+	return strings.TrimPrefix(strings.TrimSpace(countryCode), "+")
 }
 
 func (c *Client) CreateConversation(ctx context.Context, prompt string) (string, error) {

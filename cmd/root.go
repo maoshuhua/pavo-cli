@@ -19,10 +19,10 @@ import (
 )
 
 type dependencies struct {
-	config       *config.Config
-	api          *api.Client
-	store        auth.Store
-	readPassword func() (string, error)
+	config               *config.Config
+	api                  *api.Client
+	store                auth.Store
+	readVerificationCode func() (string, error)
 }
 
 func Execute() error {
@@ -52,8 +52,8 @@ func NewRootCommand(stdout, stderr io.Writer) (*cobra.Command, error) {
 		config: cfg,
 		api:    client,
 		store:  store,
-		readPassword: func() (string, error) {
-			return readPassword(os.Stdin, stderr)
+		readVerificationCode: func() (string, error) {
+			return readVerificationCode(os.Stdin, stderr)
 		},
 	}
 	return newRootCommand(stdout, stderr, deps), nil
@@ -63,7 +63,7 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	root := &cobra.Command{
 		Use:           "pavo",
 		Short:         "PAVO CLI",
-		Long:          "PAVO CLI for desktop agents: login, create conversations, and stream design generation.",
+		Long:          "PAVO CLI for desktop agents: discover models and stream design, image, video, and short-drama generation.",
 		Version:       version.Current(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -76,6 +76,8 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	root.AddCommand(newConversationCommand(stdout, stderr, deps))
 	root.AddCommand(newStreamCommand(stdout, stderr, deps))
 	root.AddCommand(newShortDramaCommand(stdout, stderr, deps))
+	root.AddCommand(newModelsCommand(stdout, stderr, deps))
+	root.AddCommand(newGenerateCommand(stdout, stderr, deps))
 	root.AddCommand(newResumeCommand(stdout, stderr, deps))
 	root.AddCommand(newUploadCommand(stdout, stderr, deps))
 	root.AddCommand(newDownloadResultCommand(stdout, stderr, deps))
@@ -84,22 +86,22 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	return root
 }
 
-func readPassword(stdin *os.File, stderr io.Writer) (string, error) {
-	fmt.Fprint(stderr, "Password: ")
+func readVerificationCode(stdin *os.File, stderr io.Writer) (string, error) {
+	fmt.Fprint(stderr, "Verification code: ")
 	if term.IsTerminal(int(stdin.Fd())) {
-		password, err := term.ReadPassword(int(stdin.Fd()))
+		code, err := term.ReadPassword(int(stdin.Fd()))
 		fmt.Fprintln(stderr)
 		if err != nil {
-			return "", fmt.Errorf("读取密码失败: %w", err)
+			return "", fmt.Errorf("读取验证码失败: %w", err)
 		}
-		return string(password), nil
+		return string(code), nil
 	}
 	scanner := bufio.NewScanner(stdin)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
-			return "", fmt.Errorf("读取密码失败: %w", err)
+			return "", fmt.Errorf("读取验证码失败: %w", err)
 		}
-		return "", errors.New("没有从标准输入读取到密码")
+		return "", errors.New("没有从标准输入读取到验证码")
 	}
 	return scanner.Text(), nil
 }

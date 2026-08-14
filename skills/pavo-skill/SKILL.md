@@ -1,13 +1,13 @@
 ---
 name: pavo-skill
-description: 使用 PAVO CLI 上传聊天附件、创建或恢复通用设计会话，并获取 PAVO 图像或视频生成结果。适用于由桌面代理处理的 PAVO 设计生成、设计编辑或聊天附件上传请求；不用于短剧创作、短剧续写或短剧流程确认，此类请求使用 short-drama skill。
+description: 使用 PAVO CLI 上传聊天附件、创建或恢复通用 design Agent 会话，并获取复杂设计结果。适用于海报、品牌视觉、方案规划等需要通用设计 Agent 的请求；基础图像或视频生成编辑使用 pavo-media-generation，短剧使用 short-drama。
 ---
 
 # PAVO 通用设计
 
 处理 PAVO 请求时，使用随附的 `pavo` CLI。支持的命令如下：
 
-短剧是独立工作流。用户要求创作短剧、续写短剧、确认短剧剧情或继续短剧会话时，使用 `$short-drama`，不要调用本 skill 的 `pavo stream`。
+基础图片/视频生成和编辑使用 `$pavo-media-generation`。短剧创作、续写、确认或继续会话使用 `$short-drama`。这两类任务都不要调用本 skill 的 `pavo stream`。
 
 1. `pavo login`
 2. `pavo upload`
@@ -17,25 +17,23 @@ description: 使用 PAVO CLI 上传聊天附件、创建或恢复通用设计会
 6. `pavo conversation status` / `pavo conversation result`
 7. `pavo download-result`
 
-首次生成设计时，依次使用 `pavo login` → `pavo conversation create` → `pavo stream`。对于中断或已在运行的会话，请保留其 `conversation_id` 并使用 `pavo resume`；不要创建替代会话。不要改用直接的 `curl` 调用，也不要调用无关的图像或视频服务。
+首次生成设计且尚未登录时，先完成手机号验证码登录，再依次使用 `pavo conversation create` → `pavo stream`。对于中断或已在运行的会话，请保留其 `conversation_id` 并使用 `pavo resume`；不要创建替代会话。不要改用直接的 `curl` 调用，也不要调用无关的图像或视频服务。
 
 ## 身份验证
 
-如果可能已存有登录状态，请先尝试用户请求的会话命令。若 CLI 提示用户未登录，请在执行登录前获取用户的 PAVO 邮箱和密码。
-
-优先使用交互式登录，以隐藏密码：
+如果可能已存有登录状态，先尝试用户请求的会话命令。若 CLI 提示未登录，向用户获取手机号与国家码；国家码未指定时使用 `86`。发送验证码：
 
 ```bash
-pavo login --email "USER_EMAIL"
+pavo login send-code --country-code "COUNTRY_CODE" --phone-number "PHONE_NUMBER"
 ```
 
-对于非交互式桌面代理终端，仅在用户明确提供此次登录所需密码时使用 `--password`：
+确认命令成功后，告知用户验证码已发送并等待用户提供本次短信验证码。不要猜测、复用示例或旧验证码。收到验证码后登录；交互终端省略 `--verification-code` 以隐藏输入：
 
 ```bash
-pavo login --email "USER_EMAIL" --password "USER_PASSWORD"
+pavo login --country-code "COUNTRY_CODE" --phone-number "PHONE_NUMBER"
 ```
 
-绝不可在回复、日志、摘要或生成的文件中重复密码或访问令牌。登录成功会输出用户信息，但绝不会输出访问令牌。
+非交互式桌面代理仅在用户已明确提供本次验证码时增加 `--verification-code "VERIFICATION_CODE"`。绝不可在回复、日志、摘要或生成文件中重复验证码或访问令牌。登录成功会输出用户信息，但不会输出访问令牌。
 
 ## 上传聊天附件
 
@@ -108,10 +106,10 @@ pavo conversation result --conversation-id "CONVERSATION_ID"
 ```bash
 pavo download-result \
   --url "RESULT_URL" \
-  --output-path "LOCAL_OUTPUT_FILE"
+  --output-path "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/TASK_NAME/RESULT_FILE"
 ```
 
-`--output-path` 必须包含目标文件名。命令保存文件时返回 `downloaded`，安全复用本地文件时返回 `already_exist`。仅在用户要求替换现有本地文件时传入 `--force`。如果服务为结果提供 Unix 更新时间戳，请将其作为 `--updated-at` 传入；否则省略。
+`--output-path` 必须包含目标文件名。所有由本 Skill 保存到本地的附件和生成产物统一放在当前工作区的 `pavo_outputs/` 下，并为每个任务使用独立子目录；只有用户明确指定其他输出路径时才使用该路径。命令保存文件时返回 `downloaded`，安全复用本地文件时返回 `already_exist`。仅在用户要求替换现有本地文件时传入 `--force`。如果服务为结果提供 Unix 更新时间戳，请将其作为 `--updated-at` 传入；否则省略。
 
 对于必须在桌面聊天中展示的 `stream` 或 `resume` 结果，优先使用内置的本地交接方式：
 
@@ -119,7 +117,7 @@ pavo download-result \
 pavo stream \
   --conversation-id "CONVERSATION_ID" \
   --prompt "USER_PROMPT" \
-  --download-dir "ABSOLUTE_TEMP_DIRECTORY"
+  --download-dir "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/TASK_NAME"
 ```
 
 `--download-dir` 会下载每个成功结果，并将其绝对 `local_path` 添加到 `results`。在回复的图像标记中使用该本地路径。若本地路径可用，不要将远程 `url` 嵌入为图像。如果生成已完成且仅有其 `url` 可用，请先调用 `pavo download-result` 再渲染它。

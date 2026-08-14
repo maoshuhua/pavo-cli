@@ -38,7 +38,7 @@ func TestCLIShortDramaStartThenReplyUsesOneConversation(t *testing.T) {
 			}
 			if body.ExtraContext == nil || body.ExtraContext.AgentParams == nil ||
 				body.ExtraContext.AgentParams.ImageModelCode != "agnes-image" ||
-				body.ExtraContext.AgentParams.VideoModelCode != "agnes-video" {
+				body.ExtraContext.AgentParams.VideoModelCode != "agnes-video-new" {
 				t.Fatalf("extra_context = %#v", body.ExtraContext)
 			}
 			if streamCalls == 1 && body.Prompt != "南京宣传片" {

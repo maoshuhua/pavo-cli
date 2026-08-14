@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultShortDramaImageModel = "agnes-image"
-	defaultShortDramaVideoModel = "agnes-video"
+	defaultShortDramaVideoModel = "agnes-video-new"
 )
 
 func newShortDramaCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command {

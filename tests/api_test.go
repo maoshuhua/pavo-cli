@@ -16,9 +16,9 @@ import (
 
 const successEvent = `{"app_standalone_card":false,"data":{"event_id":"event-1","message_id":"message-1","model_code":"agnes-image","results":[{"base64":"","height":2624,"message":"ok","mimetype":"image/jpeg","ratio":"9:16","success":true,"thumbnail_url":"https://example.test/thumb.webp","url":"https://example.test/image.jpg","width":1472}],"trace_id":"trace-1"},"seq":12,"task_id":"pavo-task-1","ts":1784785350145,"type":"GenerationSuccess"}`
 
-func TestAPILoginDoesNotSendAuthorizationAndParsesToken(t *testing.T) {
+func TestAPISendsPhoneCodeWithoutAuthorization(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != config.LoginPath {
+		if request.URL.Path != config.SendPhoneCodePath {
 			t.Fatalf("path = %q", request.URL.Path)
 		}
 		if got := request.Header.Get("Authorization"); got != "" {
@@ -27,11 +27,37 @@ func TestAPILoginDoesNotSendAuthorizationAndParsesToken(t *testing.T) {
 		if got := request.Header.Get("X-Platform"); got != "1" {
 			t.Fatalf("X-Platform = %q", got)
 		}
-		var body api.LoginRequest
+		var body api.SendPhoneCodeRequest
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body.EmailPassword.Email != "user@example.com" || body.EmailPassword.Password != "secret" {
+		if body.CountryCode != "86" || body.PhoneNumber != "13800138000" || body.Scene != "phone_auth" {
+			t.Fatalf("body = %#v", body)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{}}`))
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL, func() (string, error) { return "unused", nil })
+	if err := client.SendPhoneVerificationCode(context.Background(), " +86 ", " 13800138000 "); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAPIPhoneOTPLoginDoesNotSendAuthorizationAndParsesToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != config.PhoneOTPLoginPath {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		if got := request.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		var body api.PhoneOTPLoginRequest
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.CountryCode != "86" || body.PhoneNumber != "13800138000" || body.VerificationCode != "654321" {
 			t.Fatalf("body = %#v", body)
 		}
 		writer.Header().Set("Content-Type", "application/json")
@@ -40,18 +66,18 @@ func TestAPILoginDoesNotSendAuthorizationAndParsesToken(t *testing.T) {
 			"message":"success",
 			"data":{
 				"access_token":"token-value",
-				"user_info":{"id":"user-1","email":"user@example.com","is_active":true}
+				"user_info":{"id":"user-1","phone_number":"13800138000","auth_provider":"phone","is_active":true}
 			}
 		}`))
 	}))
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "unused", nil })
-	result, err := client.Login(context.Background(), " user@example.com ", "secret")
+	result, err := client.LoginWithPhoneOTP(context.Background(), " +86 ", " 13800138000 ", " 654321 ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.AccessToken != "token-value" || result.UserInfo.ID != "user-1" {
+	if result.AccessToken != "token-value" || result.UserInfo.ID != "user-1" || result.UserInfo.AuthProvider != "phone" {
 		t.Fatalf("result = %#v", result)
 	}
 }
@@ -118,8 +144,8 @@ func TestAPIBusinessError(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, nil)
-	if _, err := client.Login(context.Background(), "user@example.com", "bad"); err == nil {
-		t.Fatal("Login() error = nil")
+	if _, err := client.LoginWithPhoneOTP(context.Background(), "86", "13800138000", "000000"); err == nil {
+		t.Fatal("LoginWithPhoneOTP() error = nil")
 	}
 }
 
@@ -293,7 +319,7 @@ func TestAPIStreamWithOptionsSendsShortDramaContext(t *testing.T) {
 		}
 		if body.ExtraContext == nil || body.ExtraContext.AgentParams == nil ||
 			body.ExtraContext.AgentParams.ImageModelCode != "agnes-image" ||
-			body.ExtraContext.AgentParams.VideoModelCode != "agnes-video" {
+			body.ExtraContext.AgentParams.VideoModelCode != "agnes-video-new" {
 			t.Fatalf("extra_context = %#v", body.ExtraContext)
 		}
 		_, _ = writer.Write([]byte(successEvent))
@@ -305,7 +331,7 @@ func TestAPIStreamWithOptionsSendsShortDramaContext(t *testing.T) {
 		Mode: api.StreamModeShortDrama,
 		ExtraContext: &api.StreamExtraContext{AgentParams: &api.StreamAgentParams{
 			ImageModelCode: "agnes-image",
-			VideoModelCode: "agnes-video",
+			VideoModelCode: "agnes-video-new",
 		}},
 	}, nil)
 	if err != nil {
@@ -404,13 +430,15 @@ func TestConversationHistoryAggregatesAllLatestTurnArtifacts(t *testing.T) {
 
 func newTestClient(baseURL string, provider api.TokenProvider) *api.Client {
 	return api.NewClient(baseURL, 5*time.Second, &config.Paths{
-		Login:               config.LoginPath,
+		SendPhoneCode:       config.SendPhoneCodePath,
+		PhoneOTPLogin:       config.PhoneOTPLoginPath,
 		Conversation:        config.ConversationPath,
 		Stream:              config.StreamPath,
 		ResumeStream:        config.ResumeStreamPath,
 		ConversationHistory: config.ConversationHistoryPath,
 		ConversationRunning: config.ConversationRunningPath,
 		PresignedURL:        config.PresignedURLPath,
+		ModeSupportModels:   config.ModeSupportModelsPath,
 	}, provider)
 }
 

@@ -22,7 +22,7 @@ func TestCLIBusinessCommandsAreLimitedToProvidedCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"login", "conversation", "stream", "short-drama", "resume", "upload", "download-result", "update"} {
+	for _, name := range []string{"login", "conversation", "stream", "short-drama", "models", "generate", "resume", "upload", "download-result", "update"} {
 		command, _, findErr := root.Find([]string{name})
 		if findErr != nil || command.Name() != name {
 			t.Fatalf("missing command %q: command=%v err=%v", name, command, findErr)
@@ -36,27 +36,44 @@ func TestCLIBusinessCommandsAreLimitedToProvidedCapabilities(t *testing.T) {
 	}
 }
 
-func TestCLILoginStoresTokenWithoutPrintingIt(t *testing.T) {
+func TestCLIPhoneOTPLoginStoresTokenWithoutPrintingIt(t *testing.T) {
 	const token = "header.eyJleHAiOjE3ODcxOTY4NzJ9.signature"
+	const verificationCode = "654321"
+	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests = append(requests, request.URL.Path)
 		if got := request.Header.Get("Authorization"); got != "" {
 			t.Fatalf("login Authorization = %q", got)
 		}
-		var body api.LoginRequest
-		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
-			t.Fatal(err)
-		}
-		if body.EmailPassword.Password != "secret" {
-			t.Fatal("login password was not sent")
-		}
-		_, _ = writer.Write([]byte(`{
-			"code":"000000",
-			"message":"success",
-			"data":{
-				"access_token":"` + token + `",
-				"user_info":{"id":"user-1","email":"user@example.com","is_active":true}
+		switch request.URL.Path {
+		case config.SendPhoneCodePath:
+			var body api.SendPhoneCodeRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
 			}
-		}`))
+			if body.CountryCode != "86" || body.PhoneNumber != "13800138000" || body.Scene != "phone_auth" {
+				t.Fatalf("send-code body = %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{}}`))
+		case config.PhoneOTPLoginPath:
+			var body api.PhoneOTPLoginRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.CountryCode != "86" || body.PhoneNumber != "13800138000" || body.VerificationCode != verificationCode {
+				t.Fatalf("login body = %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{
+				"code":"000000",
+				"message":"success",
+				"data":{
+					"access_token":"` + token + `",
+					"user_info":{"id":"user-1","phone_number":"13800138000","auth_provider":"phone","is_active":true}
+				}
+			}`))
+		default:
+			t.Fatalf("unexpected path %q", request.URL.Path)
+		}
 	}))
 	defer server.Close()
 
@@ -64,15 +81,27 @@ func TestCLILoginStoresTokenWithoutPrintingIt(t *testing.T) {
 	t.Setenv(config.EnvAPIBaseURL, server.URL)
 	t.Setenv(config.EnvConfigFile, configPath)
 	t.Setenv(config.EnvAccessToken, "")
-	t.Setenv(config.EnvPassword, "")
+	t.Setenv(config.EnvVerificationCode, "")
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	root, err := cmd.NewRootCommand(&stdout, &stderr)
+	var sendStdout bytes.Buffer
+	root, err := cmd.NewRootCommand(&sendStdout, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	root.SetArgs([]string{"login", "--email", "user@example.com", "--password", "secret"})
+	root.SetArgs([]string{"login", "send-code", "--country-code", "+86", "--phone-number", "13800138000"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sendStdout.String(), `"verification_code_sent":true`) {
+		t.Fatalf("send-code stdout = %q", sendStdout.String())
+	}
+
+	var stdout bytes.Buffer
+	root, err = cmd.NewRootCommand(&stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"login", "--country-code", "86", "--phone-number", "13800138000", "--verification-code", verificationCode})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +113,11 @@ func TestCLILoginStoresTokenWithoutPrintingIt(t *testing.T) {
 	if session.AccessToken != token || session.User.ID != "user-1" {
 		t.Fatalf("session = %#v", session)
 	}
-	if strings.Contains(stdout.String(), token) || strings.Contains(stdout.String(), "secret") {
+	if strings.Contains(stdout.String(), token) || strings.Contains(stdout.String(), verificationCode) {
 		t.Fatalf("sensitive login value leaked to stdout: %s", stdout.String())
+	}
+	if len(requests) != 2 || requests[0] != config.SendPhoneCodePath || requests[1] != config.PhoneOTPLoginPath {
+		t.Fatalf("requests = %#v", requests)
 	}
 }
 

@@ -6,6 +6,4 @@ __pycache__/
 *.pyc
 .local/
 tmp/
-pavo-output
-pavo-video-output
-short-drama
+pavo_outputs/

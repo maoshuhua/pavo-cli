@@ -42,8 +42,7 @@ func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt str
 }
 
 // StreamWithOptions starts a streamed PAVO turn with an explicit agent mode.
-// It is used by the short-drama command to send mode=short_drama together with
-// the model codes required by the PAVO short-drama service.
+// It is shared by design, short-drama, image, and video commands.
 func (c *Client) StreamWithOptions(ctx context.Context, conversationID, prompt string, options StreamOptions, handler EventHandler) (*StreamOutput, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	prompt = strings.TrimSpace(prompt)
@@ -65,13 +64,30 @@ func (c *Client) StreamWithOptions(ctx context.Context, conversationID, prompt s
 	if err != nil {
 		return nil, err
 	}
-	return c.openStream(ctx, c.paths.Stream, conversationID, StreamRequest{
+	creative, err := normalizeCreativeGenerationOptions(options.Mode, options.Creative)
+	if err != nil {
+		return nil, err
+	}
+	request := StreamRequest{
 		ConversationID: ConversationID(conversationID),
 		Prompt:         prompt,
 		Mode:           mode,
 		Files:          files,
 		ExtraContext:   extraContext,
-	}, handler)
+	}
+	if creative != nil {
+		request.Model = creative.Model
+		request.Ratio = creative.Ratio
+		request.Resolution = creative.Resolution
+		request.Duration = creative.Duration
+		request.Count = creative.Count
+		request.Sound = creative.Sound
+		request.Images = creative.Images
+		request.Videos = creative.Videos
+		request.Audios = creative.Audios
+		request.CreativePromptJSON = creative.CreativePromptJSON
+	}
+	return c.openStream(ctx, c.paths.Stream, conversationID, request, handler)
 }
 
 // Resume replays buffered events and then continues receiving live events for
@@ -202,6 +218,106 @@ func normalizeStreamExtraContext(extraContext *StreamExtraContext) (*StreamExtra
 		return nil, errors.New("extra_context.agent_params 需要 image_model_code 和 video_model_code")
 	}
 	return &StreamExtraContext{AgentParams: params}, nil
+}
+
+func normalizeCreativeGenerationOptions(mode StreamMode, creative *CreativeGenerationOptions) (*CreativeGenerationOptions, error) {
+	isGenerationMode := mode == StreamModeGenerateImage || mode == StreamModeGenerateVideo || mode == StreamModeFramesToVideo
+	if !isGenerationMode {
+		if creative != nil {
+			return nil, errors.New("creative 参数只能用于图像或视频生成模式")
+		}
+		return nil, nil
+	}
+	if creative == nil {
+		return nil, errors.New("图像和视频生成需要 generation 参数")
+	}
+	normalized := *creative
+	normalized.Model = strings.TrimSpace(normalized.Model)
+	if normalized.Model == "" {
+		return nil, errors.New("创意生成需要非空 model")
+	}
+	normalized.Ratio = strings.ToLower(strings.TrimSpace(normalized.Ratio))
+	if normalized.Ratio == "" {
+		normalized.Ratio = "auto"
+	}
+	if !isSupportedRatio(normalized.Ratio) {
+		return nil, errors.New("ratio 必须是 auto、1:1、4:3、3:4、16:9、9:16、3:2、2:3、21:9、4:5 或 5:4")
+	}
+	normalized.Resolution = strings.ToUpper(strings.TrimSpace(normalized.Resolution))
+	if normalized.Resolution == "" || normalized.Resolution == "AUTO" {
+		normalized.Resolution = "auto"
+	}
+	if normalized.Resolution != "auto" && normalized.Resolution != "SD" && normalized.Resolution != "HD" && normalized.Resolution != "UHD" {
+		return nil, errors.New("resolution 必须是 auto、SD、HD 或 UHD")
+	}
+	var err error
+	if normalized.Images, err = normalizeMediaReferences("images", normalized.Images, 5); err != nil {
+		return nil, err
+	}
+	if normalized.Videos, err = normalizeMediaReferences("videos", normalized.Videos, 0); err != nil {
+		return nil, err
+	}
+	if normalized.Audios, err = normalizeMediaReferences("audios", normalized.Audios, 0); err != nil {
+		return nil, err
+	}
+	if mode == StreamModeGenerateImage && (len(normalized.Videos) > 0 || len(normalized.Audios) > 0) {
+		return nil, errors.New("generate_image 不接受 video 或 audio 参考素材")
+	}
+	if mode == StreamModeFramesToVideo {
+		if len(normalized.Images) > 2 {
+			return nil, errors.New("frames_to_video 文生视频不传图片，首尾帧生视频最多传 2 张图片")
+		}
+		if len(normalized.Videos) > 0 || len(normalized.Audios) > 0 {
+			return nil, errors.New("frames_to_video 不接受 video 或 audio 参考素材")
+		}
+	}
+	normalized.CreativePromptJSON = strings.TrimSpace(normalized.CreativePromptJSON)
+	if mode != StreamModeFramesToVideo && normalized.CreativePromptJSON == "" {
+		return nil, errors.New("创意生成需要 creative_prompt_json")
+	}
+	if normalized.CreativePromptJSON != "" {
+		var blocks []json.RawMessage
+		if err := json.Unmarshal([]byte(normalized.CreativePromptJSON), &blocks); err != nil || len(blocks) == 0 {
+			return nil, errors.New("creative_prompt_json 必须是非空 JSON 数组")
+		}
+	}
+	for name, value := range map[string]json.RawMessage{
+		"duration": normalized.Duration,
+		"count":    normalized.Count,
+		"sound":    normalized.Sound,
+	} {
+		if len(value) > 0 && !json.Valid(value) {
+			return nil, fmt.Errorf("%s 不是有效 JSON 值", name)
+		}
+	}
+	return &normalized, nil
+}
+
+func normalizeMediaReferences(field string, references []MediaReference, max int) ([]MediaReference, error) {
+	if len(references) == 0 {
+		return nil, nil
+	}
+	if max > 0 && len(references) > max {
+		return nil, fmt.Errorf("%s 最多允许 %d 项", field, max)
+	}
+	normalized := make([]MediaReference, len(references))
+	for index, reference := range references {
+		reference.URL = strings.TrimSpace(reference.URL)
+		if err := validateHTTPURL(reference.URL, fmt.Sprintf("%s[%d].url", field, index)); err != nil {
+			return nil, err
+		}
+		normalized[index] = reference
+	}
+	return normalized, nil
+}
+
+func isSupportedRatio(value string) bool {
+	switch value {
+	case "auto", "1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "21:9", "4:5", "5:4":
+		return true
+	default:
+		return false
+	}
 }
 
 func looksLikeSSE(reader *bufio.Reader) bool {
