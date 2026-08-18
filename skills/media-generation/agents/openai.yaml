@@ -1,4 +1,4 @@
 interface:
   display_name: "PAVO 图像与视频生成"
-  short_description: "查询个人媒体与 Pixa 模型，并生成或编辑图像和视频"
-  default_prompt: "使用 $media-generation 查询我的图片或视频，或通过 PAVO 生成和编辑媒体。"
+  short_description: "并行下载个人媒体、查询 Pixa 模型并生成或编辑图像和视频"
+  default_prompt: "使用 $media-generation 查询并下载我的图片或视频，或通过 PAVO 生成和编辑媒体。"

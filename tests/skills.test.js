@@ -40,6 +40,10 @@ for (const requiredText of [
   "pavo short-drama resume",
   "pavo short-drama list",
   "short_drama_final",
+  "--download-concurrency 4",
+  "local_path",
+  "download_error",
+  "failed",
   "conversation_id",
   "short_drama",
   "agnes-image",
@@ -62,6 +66,10 @@ for (const requiredText of [
   "pavo generate video",
   "pavo visuals --category images",
   "pavo visuals --category videos",
+  "--download-concurrency 4",
+  "local_path",
+  "download_error",
+  "failed",
   "creative_prompt_json",
   "agnes-image",
   "agnes-video-new",
@@ -94,7 +102,7 @@ for (const modelDocument of [shortDramaSkill, mediaSkill, readme]) {
   assert.doesNotMatch(modelDocument, /agnes-video(?!-new)/);
 }
 
-for (const requiredText of ["skills/media-generation/", "skills/short-drama/", "pavo visuals --category images", "pavo short-drama list", "pavo short-drama start", "pavo generate image", "pavo_outputs/", "https://api.pavo-ai.cn", "pavo login send-code"]) {
+for (const requiredText of ["skills/media-generation/", "skills/short-drama/", "pavo visuals --category images", "pavo short-drama list", "--download-concurrency 4", "local_path", "download_error", "failed", "pavo short-drama start", "pavo generate image", "pavo_outputs/", "https://api.pavo-ai.cn", "pavo login send-code"]) {
   assert.ok(readme.includes(requiredText), `README missing skill contract: ${requiredText}`);
 }
 for (const removedText of ["skills/pavo-skill/", "skills/pavo-media-generation/", "pavo conversation create", "pavo stream", "--mode design", '"mode": "design"']) {

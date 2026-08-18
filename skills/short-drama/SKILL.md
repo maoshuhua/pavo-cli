@@ -1,6 +1,6 @@
 ---
 name: short-drama
-description: 使用 PAVO CLI 查询当前登录人的短剧成片，以及创建、续写、修改和恢复多轮短剧创作会话。适用于查看个人短剧、查询已生成短剧、创作短剧、写短剧剧本、继续某个短剧、回答短剧创作问题、调整短剧风格或获取短剧生成结果时。短剧必须通过 pavo short-drama 命令完成。
+description: 使用 PAVO CLI 查询并并行下载当前登录人的短剧成片，以及创建、续写、修改和恢复多轮短剧创作会话。适用于查看或下载个人短剧、查询已生成短剧、创作短剧、写短剧剧本、继续某个短剧、回答短剧创作问题、调整短剧风格或获取短剧生成结果时。短剧必须通过 pavo short-drama 命令完成。
 ---
 
 # PAVO 短剧
@@ -19,13 +19,15 @@ description: 使用 PAVO CLI 查询当前登录人的短剧成片，以及创建
 
 ## 查询当前登录人的短剧
 
-分页查询当前登录人的已完成短剧成片。此命令固定使用服务端类别 `short_drama_final`：
+分页查询当前登录人的已完成短剧成片并并行下载查询结果。此命令固定使用服务端类别 `short_drama_final`：
 
 ```bash
-pavo short-drama list --page 1 --page-size 5
+pavo short-drama list --page 1 --page-size 5 \
+  --download-dir "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/visuals/short_drama_final" \
+  --download-concurrency 4
 ```
 
-按用户要求传递页码和每页数量；未指定时沿用 `--page 1 --page-size 5`。输出中的 `pagination` 是分页信息，`groups[].list[]` 是按日期分组的短剧。展示时优先读取条目顶层的 `url`、`thumbnail_url`；若为空，则读取 `metadata.url`、`metadata.thumbnail_url` 或 `metadata.original_url`。这用于跨会话浏览个人短剧；已知 `conversation_id` 且需要读取某个会话的持久结果时，仍使用 `pavo short-drama result`。
+按用户要求传递页码和每页数量；未指定时沿用 `--page 1 --page-size 5`。查询命令必须下载资产，不要省略 `--download-dir`；使用默认 4 路并发，只有用户明确要求时才在 1–32 范围内调整 `--download-concurrency`。输出中的 `pagination` 是分页信息，`groups[].list[]` 是按日期分组的短剧，`downloaded` 与 `failed` 是下载成功和失败数量。使用成功项的绝对 `local_path` 展示视频，不要改用远程 URL；单项下载失败时继续展示其他成功短剧，只告知该项 `download_error` 中的失败原因，不要把整个查询报告为失败。这用于跨会话浏览个人短剧；已知 `conversation_id` 且需要读取某个会话的持久结果时，仍使用 `pavo short-drama result`。
 
 ## 首次创作
 

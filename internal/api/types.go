@@ -178,14 +178,16 @@ type VisualGroup struct {
 // VisualItem keeps category-specific metadata as raw JSON so new image,
 // video, and short-drama fields pass through without a CLI update.
 type VisualItem struct {
-	VisualID     ConversationID  `json:"visual_id"`
-	Source       string          `json:"source"`
-	ResourceID   ConversationID  `json:"resource_id"`
-	Type         string          `json:"type"`
-	URL          string          `json:"url"`
-	ThumbnailURL string          `json:"thumbnail_url"`
-	CreatedAt    string          `json:"created_at"`
-	Metadata     json.RawMessage `json:"metadata"`
+	VisualID      ConversationID  `json:"visual_id"`
+	Source        string          `json:"source"`
+	ResourceID    ConversationID  `json:"resource_id"`
+	Type          string          `json:"type"`
+	URL           string          `json:"url"`
+	ThumbnailURL  string          `json:"thumbnail_url"`
+	CreatedAt     string          `json:"created_at"`
+	Metadata      json.RawMessage `json:"metadata"`
+	LocalPath     string          `json:"local_path,omitempty"`
+	DownloadError string          `json:"download_error,omitempty"`
 }
 
 // StreamOptions configures one new streamed turn. Resume calls never reuse
