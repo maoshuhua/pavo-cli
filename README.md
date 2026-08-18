@@ -7,8 +7,8 @@ PAVO 桌面端创作 CLI。项目提供十项业务能力：
 3. 将已生成的图片或视频 URL 下载为本地文件。
 4. 在客户端断线或重复进入会话时恢复已有生成流。
 5. 查询会话运行状态，并从持久历史读取最终生成结果。
-6. 分页查询当前登录人的图片与视频。
-7. 分页查询当前登录人的已完成短剧。
+6. 分页查询并并行下载当前登录人的图片与视频。
+7. 分页查询并并行下载当前登录人的已完成短剧。
 8. 创建、续写、恢复和查询多轮短剧会话。
 9. 按短剧、生图或生视频模式动态查询当前支持的模型。
 10. 通过 Pixa 创意流生成或编辑基础图像与视频。
@@ -27,7 +27,7 @@ pavo --version
 在 npm Registry 发布前，也可以直接通过 GitHub Release 安装：
 
 ```bash
-npx -y github:maoshuhua/pavo-cli#v0.1.3 install github:maoshuhua/pavo-cli#v0.1.3
+npx -y github:maoshuhua/pavo-cli#v0.1.4 install github:maoshuhua/pavo-cli#v0.1.4
 pavo --version
 ```
 
@@ -88,14 +88,20 @@ CLI 分别发送以下请求体：
 图片和视频通过 `visuals` 命令分页查询：
 
 ```bash
-pavo visuals --category images --page 1 --page-size 5
-pavo visuals --category videos --page 1 --page-size 5
+pavo visuals --category images --page 1 --page-size 5 \
+  --download-dir "C:\workspace\pavo_outputs\visuals\images" \
+  --download-concurrency 4
+pavo visuals --category videos --page 1 --page-size 5 \
+  --download-dir "C:\workspace\pavo_outputs\visuals\videos" \
+  --download-concurrency 4
 ```
 
 已完成短剧通过短剧命令组查询；CLI 会固定使用接口类别 `short_drama_final`：
 
 ```bash
-pavo short-drama list --page 1 --page-size 5
+pavo short-drama list --page 1 --page-size 5 \
+  --download-dir "C:\workspace\pavo_outputs\visuals\short_drama_final" \
+  --download-concurrency 4
 ```
 
 三种查询都使用当前登录 Token 调用：
@@ -105,7 +111,7 @@ GET /api/v1/visuals?page_size=5&category=images&page=1
 Authorization: Bearer <access_token>
 ```
 
-输出保留服务端的 `pagination` 与按日期组织的 `groups[].list[]`，并完整透传每条结果的 `metadata`。图片或视频地址可能位于条目顶层，也可能位于 `metadata.url`、`metadata.thumbnail_url` 或 `metadata.original_url`。
+查询完成后，CLI 使用受控并发下载每项资产，默认并发数为 4，可通过 `--download-concurrency` 在 1–32 范围内调整。不指定 `--download-dir` 时，默认保存到当前工作区的 `pavo_outputs/visuals/<category>/`。输出保留服务端的 `pagination`、按日期组织的 `groups[].list[]` 与完整 `metadata`，并返回 `downloaded`、`failed` 计数。下载成功的条目写入绝对 `local_path`；单项失败只在该条目写入 `download_error` 原因，不中断其他资产下载，也不影响成功资产展示。
 
 ## 查询支持的模型
 

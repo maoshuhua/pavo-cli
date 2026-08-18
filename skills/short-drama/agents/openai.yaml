@@ -1,4 +1,4 @@
 interface:
   display_name: "PAVO 短剧"
-  short_description: "查询成片，并创建、续写与恢复 PAVO 多轮短剧创作"
-  default_prompt: "使用 $short-drama 查询我的短剧，或根据我的创意创作一部短剧。"
+  short_description: "并行下载短剧成片，并创建、续写与恢复 PAVO 多轮短剧"
+  default_prompt: "使用 $short-drama 查询并下载我的短剧，或根据我的创意创作一部短剧。"

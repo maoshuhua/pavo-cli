@@ -1,6 +1,6 @@
 ---
 name: media-generation
-description: 使用 PAVO CLI 查询当前登录人的图片/视频与 Pixa 当前支持的模型，并生成或编辑单张/多张图像与视频。适用于查看个人图片或视频、文生图、参考图改图、图像美化、文生视频、图生视频、参考视频或音频驱动的视频创作；不用于短剧工作流。
+description: 使用 PAVO CLI 查询并并行下载当前登录人的图片/视频、查询 Pixa 当前支持的模型，并生成或编辑单张/多张图像与视频。适用于查看或下载个人图片和视频、文生图、参考图改图、图像美化、文生视频、图生视频、参考视频或音频驱动的视频创作；不用于短剧工作流。
 ---
 
 # PAVO 基础图像与视频生成
@@ -11,14 +11,18 @@ description: 使用 PAVO CLI 查询当前登录人的图片/视频与 Pixa 当�
 
 ## 查询当前登录人的图片或视频
 
-使用当前登录 Token 分页查询个人媒体库。图片使用 `images`，视频使用 `videos`；不要使用 `short_drama_final`，短剧成片查询交给 `$short-drama`：
+使用当前登录 Token 分页查询个人媒体库并并行下载查询结果。图片使用 `images`，视频使用 `videos`；不要使用 `short_drama_final`，短剧成片查询交给 `$short-drama`：
 
 ```bash
-pavo visuals --category images --page 1 --page-size 5
-pavo visuals --category videos --page 1 --page-size 5
+pavo visuals --category images --page 1 --page-size 5 \
+  --download-dir "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/visuals/images" \
+  --download-concurrency 4
+pavo visuals --category videos --page 1 --page-size 5 \
+  --download-dir "ABSOLUTE_WORKSPACE_PATH/pavo_outputs/visuals/videos" \
+  --download-concurrency 4
 ```
 
-按用户要求传递页码和每页数量；未指定时沿用 `--page 1 --page-size 5`。输出中的 `pagination` 是分页信息，`groups[].list[]` 是按日期分组的结果。展示时优先读取条目顶层的 `url`、`thumbnail_url`；若为空，则读取 `metadata.url`、`metadata.thumbnail_url` 或 `metadata.original_url`。保留 `visual_id`、`resource_id`、`source`、`type`、`created_at` 和完整 `metadata`，不要猜测缺失字段。
+按用户要求传递页码和每页数量；未指定时沿用 `--page 1 --page-size 5`。查询命令必须下载资产，不要省略 `--download-dir`；使用默认 4 路并发，只有用户明确要求时才在 1–32 范围内调整 `--download-concurrency`。输出中的 `pagination` 是分页信息，`groups[].list[]` 是按日期分组的结果，`downloaded` 与 `failed` 是下载成功和失败数量。使用成功项的绝对 `local_path` 展示图片或视频，不要改用远程 URL；单项下载失败时继续展示其他成功资产，只告知该项 `download_error` 中的失败原因，不要把整个查询报告为失败。保留 `visual_id`、`resource_id`、`source`、`type`、`created_at` 和完整 `metadata`。
 
 ## 模型发现与选择
 
