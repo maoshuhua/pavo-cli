@@ -36,7 +36,8 @@ func TestConfigUsesDefaults(t *testing.T) {
 		cfg.Paths.Stream != config.StreamPath ||
 		cfg.Paths.ResumeStream != config.ResumeStreamPath ||
 		cfg.Paths.ConversationHistory != config.ConversationHistoryPath ||
-		cfg.Paths.ConversationRunning != config.ConversationRunningPath {
+		cfg.Paths.ConversationRunning != config.ConversationRunningPath ||
+		cfg.Paths.Visuals != config.VisualsPath {
 		t.Fatalf("Paths = %#v", cfg.Paths)
 	}
 }

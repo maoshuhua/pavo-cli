@@ -17,7 +17,7 @@ const defaultPackage = "@pavo-dev/cli"
 func NewCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update PAVO CLI and its desktop-agent skill",
+		Short: "Update PAVO CLI and its skills",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runUpdate(stdout, stderr)
@@ -46,11 +46,15 @@ func runUpdate(stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("定位全局 npm 包失败: %w", err)
 	}
-	fmt.Fprintln(stderr, "Updating PAVO desktop-agent skill...")
+	fmt.Fprintln(stderr, "Removing the retired PAVO legacy skill...")
+	if err := runInherit(stderr, "node", filepath.Join(root, "scripts", "skills.js"), "remove-legacy"); err != nil {
+		return fmt.Errorf("移除旧 PAVO Skill 失败: %w", err)
+	}
+	fmt.Fprintln(stderr, "Updating PAVO skills...")
 	if err := runInherit(stderr, "npx", "-y", "skills", "add", root, "-g", "-y", "--skill", "*"); err != nil {
 		return fmt.Errorf("更新 PAVO Skill 失败: %w", err)
 	}
-	fmt.Fprintln(stdout, "PAVO CLI and skill updated")
+	fmt.Fprintln(stdout, "PAVO CLI and skills updated")
 	return nil
 }
 

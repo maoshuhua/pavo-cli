@@ -55,7 +55,7 @@ func newModelsCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	flags := cmd.Flags()
-	flags.StringVar(&mode, "mode", "", "mode code: short_drama, generate_image, generate_video, or design")
+	flags.StringVar(&mode, "mode", "", "mode code: short_drama, generate_image, or generate_video")
 	flags.StringVar(&modelType, "type", "", "short_drama model type filter: image or video")
 	flags.BoolVar(&onlineOnly, "online-only", false, "only return models whose is_online field is true")
 	return cmd

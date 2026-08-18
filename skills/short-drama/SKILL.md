@@ -1,11 +1,11 @@
 ---
 name: short-drama
-description: 使用 PAVO CLI 创建、续写、修改和恢复多轮短剧创作会话。适用于用户要求创作短剧、写短剧剧本、继续某个短剧、回答短剧创作问题、调整短剧风格或获取短剧生成结果时。短剧必须通过 pavo short-drama 命令完成，不使用通用 design stream。
+description: 使用 PAVO CLI 查询当前登录人的短剧成片，以及创建、续写、修改和恢复多轮短剧创作会话。适用于查看个人短剧、查询已生成短剧、创作短剧、写短剧剧本、继续某个短剧、回答短剧创作问题、调整短剧风格或获取短剧生成结果时。短剧必须通过 pavo short-drama 命令完成。
 ---
 
 # PAVO 短剧
 
-使用 `pavo short-drama` 处理短剧创作。短剧是服务端维护状态的多轮会话：首次创建会话，后续补充、选择、确认与修改都复用同一个 `conversation_id`。不要改用通用 `pavo stream`，不要调用其他图像或视频服务，也不要自行代写、扩写或重组用户的短剧需求。
+使用 `pavo short-drama` 处理短剧创作。短剧是服务端维护状态的多轮会话：首次创建会话，后续补充、选择、确认与修改都复用同一个 `conversation_id`。不要改用其他生成命令，不要调用其他图像或视频服务，也不要自行代写、扩写或重组用户的短剧需求。
 
 ## 命令
 
@@ -14,7 +14,18 @@ description: 使用 PAVO CLI 创建、续写、修改和恢复多轮短剧创作
 3. `pavo short-drama resume`
 4. `pavo short-drama status`
 5. `pavo short-drama result`
-6. `pavo download-result`
+6. `pavo short-drama list`
+7. `pavo download-result`
+
+## 查询当前登录人的短剧
+
+分页查询当前登录人的已完成短剧成片。此命令固定使用服务端类别 `short_drama_final`：
+
+```bash
+pavo short-drama list --page 1 --page-size 5
+```
+
+按用户要求传递页码和每页数量；未指定时沿用 `--page 1 --page-size 5`。输出中的 `pagination` 是分页信息，`groups[].list[]` 是按日期分组的短剧。展示时优先读取条目顶层的 `url`、`thumbnail_url`；若为空，则读取 `metadata.url`、`metadata.thumbnail_url` 或 `metadata.original_url`。这用于跨会话浏览个人短剧；已知 `conversation_id` 且需要读取某个会话的持久结果时，仍使用 `pavo short-drama result`。
 
 ## 首次创作
 
@@ -59,7 +70,7 @@ pavo short-drama reply \
   --prompt "USER_REPLY"
 ```
 
-每次 `reply` 仍会携带短剧模式和默认的 Agnes 图片、视频模型。不要为后续轮次创建新会话，也不要用 `pavo conversation create` 代替 `reply`。
+每次 `reply` 仍会携带短剧模式和默认的 Agnes 图片、视频模型。不要为后续轮次创建新会话；始终使用 `reply` 继续。
 
 ## 中断、状态和结果
 

@@ -1,13 +1,24 @@
 ---
-name: pavo-media-generation
-description: 使用 PAVO CLI 查询 Pixa 当前支持的模型，并生成或编辑单张/多张图像与视频。适用于文生图、参考图改图、图像美化、文生视频、图生视频、参考视频或音频驱动的视频创作；不用于复杂通用设计 Agent 或短剧工作流。
+name: media-generation
+description: 使用 PAVO CLI 查询当前登录人的图片/视频与 Pixa 当前支持的模型，并生成或编辑单张/多张图像与视频。适用于查看个人图片或视频、文生图、参考图改图、图像美化、文生视频、图生视频、参考视频或音频驱动的视频创作；不用于短剧工作流。
 ---
 
 # PAVO 基础图像与视频生成
 
 使用 `pavo models` 动态读取服务端模型目录，再通过 `pavo generate image` 或 `pavo generate video` 完成创作。不要维护或引用静态模型表，不要绕过 CLI 直接调用 Pixa API，也不要改用其他图像或视频服务。
 
-复杂海报、品牌设计或需要通用设计 Agent 多轮规划的任务使用 `$pavo-skill`。短剧、短漫剧及短剧多轮确认使用 `$short-drama`。
+短剧、短漫剧及短剧多轮确认使用 `$short-drama`。
+
+## 查询当前登录人的图片或视频
+
+使用当前登录 Token 分页查询个人媒体库。图片使用 `images`，视频使用 `videos`；不要使用 `short_drama_final`，短剧成片查询交给 `$short-drama`：
+
+```bash
+pavo visuals --category images --page 1 --page-size 5
+pavo visuals --category videos --page 1 --page-size 5
+```
+
+按用户要求传递页码和每页数量；未指定时沿用 `--page 1 --page-size 5`。输出中的 `pagination` 是分页信息，`groups[].list[]` 是按日期分组的结果。展示时优先读取条目顶层的 `url`、`thumbnail_url`；若为空，则读取 `metadata.url`、`metadata.thumbnail_url` 或 `metadata.original_url`。保留 `visual_id`、`resource_id`、`source`、`type`、`created_at` 和完整 `metadata`，不要猜测缺失字段。
 
 ## 模型发现与选择
 
@@ -22,12 +33,11 @@ pavo models --mode generate_video --online-only
 
 判断免费模型时只认 `tags[].code == "free"`，不要根据 `subscription_level == 0` 推断免费。`is_online: false` 的模型不可提交。生图未指定模型时沿用默认 `agnes-image`。纯文本视频或明确指定 1–2 张首尾帧图的视频未指定模型时可用默认 `agnes-video-new`。确定使用 `omni_to_video` 时先查询模型目录；若默认模型在线且支持该模式则继续使用，否则让用户从支持该模式的模型中选择。不要擅自切换到可能收费的模型。命令提交前仍会实时验证模型及视频模式。
 
-短剧与设计模式的模型目录也可分别查询：
+短剧模式的模型目录也可分别查询：
 
 ```bash
 pavo models --mode short_drama --type image --online-only
 pavo models --mode short_drama --type video --online-only
-pavo models --mode design --online-only
 ```
 
 ## 生成或编辑图像

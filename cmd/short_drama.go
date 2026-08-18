@@ -28,6 +28,7 @@ func newShortDramaCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.C
 	cmd.AddCommand(newShortDramaResumeCommand(stdout, stderr, deps))
 	cmd.AddCommand(newShortDramaStatusCommand(stdout, stderr, deps))
 	cmd.AddCommand(newShortDramaResultCommand(stdout, stderr, deps))
+	cmd.AddCommand(newShortDramaListCommand(stdout, stderr, deps))
 	return cmd
 }
 
@@ -75,8 +76,8 @@ func newShortDramaStartCommand(stdout, stderr io.Writer, deps *dependencies) *co
 	flags := cmd.Flags()
 	flags.StringVar(&prompt, "prompt", "", "short-drama idea or instruction")
 	flags.StringArrayVar(&filePaths, "file", nil, "local attachment to upload before the short-drama turn; repeat for multiple files")
-	flags.StringVar(&imageModelCode, "image-model-code", defaultShortDramaImageModel, "image model code used by the short-drama agent")
-	flags.StringVar(&videoModelCode, "video-model-code", defaultShortDramaVideoModel, "video model code used by the short-drama agent")
+	flags.StringVar(&imageModelCode, "image-model-code", defaultShortDramaImageModel, "image model code used by short-drama generation")
+	flags.StringVar(&videoModelCode, "video-model-code", defaultShortDramaVideoModel, "video model code used by short-drama generation")
 	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
 	flags.BoolVar(&liveAssets, "live-assets", false, "write each completed image or video as asset_ready JSONL to stdout")
@@ -129,8 +130,8 @@ func newShortDramaReplyCommand(stdout, stderr io.Writer, deps *dependencies) *co
 	flags.StringVar(&conversationID, "conversation-id", "", "short-drama conversation ID returned by start")
 	flags.StringVar(&prompt, "prompt", "", "user reply or next short-drama instruction")
 	flags.StringArrayVar(&filePaths, "file", nil, "local attachment to upload before the short-drama turn; repeat for multiple files")
-	flags.StringVar(&imageModelCode, "image-model-code", defaultShortDramaImageModel, "image model code used by the short-drama agent")
-	flags.StringVar(&videoModelCode, "video-model-code", defaultShortDramaVideoModel, "video model code used by the short-drama agent")
+	flags.StringVar(&imageModelCode, "image-model-code", defaultShortDramaImageModel, "image model code used by short-drama generation")
+	flags.StringVar(&videoModelCode, "video-model-code", defaultShortDramaVideoModel, "video model code used by short-drama generation")
 	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
 	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
 	flags.BoolVar(&liveAssets, "live-assets", false, "write each completed image or video as asset_ready JSONL to stdout")
@@ -258,7 +259,7 @@ func shortDramaStreamOptions(imageModelCode, videoModelCode string, files []api.
 	return api.StreamOptions{
 		Mode:  api.StreamModeShortDrama,
 		Files: files,
-		ExtraContext: &api.StreamExtraContext{AgentParams: &api.StreamAgentParams{
+		ExtraContext: &api.StreamExtraContext{ShortDramaParams: &api.ShortDramaModelParams{
 			ImageModelCode: imageModelCode,
 			VideoModelCode: videoModelCode,
 		}},

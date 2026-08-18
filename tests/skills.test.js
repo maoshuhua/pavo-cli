@@ -1,78 +1,45 @@
 const assert = require("assert");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "..");
-const skillPath = path.join(repoRoot, "skills", "pavo-skill", "SKILL.md");
-const agentMetadataPath = path.join(repoRoot, "skills", "pavo-skill", "agents", "openai.yaml");
+const removedSkillDir = path.join(repoRoot, "skills", "pavo-skill");
+const removedMediaSkillDir = path.join(repoRoot, "skills", "pavo-media-generation");
 const shortDramaSkillPath = path.join(repoRoot, "skills", "short-drama", "SKILL.md");
 const shortDramaAgentMetadataPath = path.join(repoRoot, "skills", "short-drama", "agents", "openai.yaml");
-const mediaSkillPath = path.join(repoRoot, "skills", "pavo-media-generation", "SKILL.md");
-const mediaAgentMetadataPath = path.join(repoRoot, "skills", "pavo-media-generation", "agents", "openai.yaml");
+const mediaSkillPath = path.join(repoRoot, "skills", "media-generation", "SKILL.md");
+const mediaAgentMetadataPath = path.join(repoRoot, "skills", "media-generation", "agents", "openai.yaml");
 const readmePath = path.join(repoRoot, "README.md");
 
-assert.strictEqual(fs.existsSync(skillPath), true, `missing required file: ${skillPath}`);
-assert.strictEqual(
-  fs.existsSync(agentMetadataPath),
-  true,
-  `missing recommended file: ${agentMetadataPath}`,
-);
-assert.strictEqual(fs.existsSync(readmePath), true, `missing required file: ${readmePath}`);
+assert.strictEqual(fs.existsSync(removedSkillDir), false, "removed pavo-skill directory remains");
+assert.strictEqual(fs.existsSync(removedMediaSkillDir), false, "removed pavo-media-generation directory remains");
+assert.strictEqual(fs.existsSync(path.join(repoRoot, "skills", "pavo")), false, "legacy pavo skill directory remains");
 assert.strictEqual(fs.existsSync(shortDramaSkillPath), true, `missing required file: ${shortDramaSkillPath}`);
 assert.strictEqual(fs.existsSync(mediaSkillPath), true, `missing required file: ${mediaSkillPath}`);
-assert.strictEqual(
-  fs.existsSync(shortDramaAgentMetadataPath),
-  true,
-  `missing recommended file: ${shortDramaAgentMetadataPath}`,
-);
-assert.strictEqual(
-  fs.existsSync(mediaAgentMetadataPath),
-  true,
-  `missing recommended file: ${mediaAgentMetadataPath}`,
-);
-assert.strictEqual(fs.existsSync(path.join(repoRoot, "skills", "pavo")), false, "legacy pavo skill directory remains");
+assert.strictEqual(fs.existsSync(readmePath), true, `missing required file: ${readmePath}`);
+assert.strictEqual(fs.existsSync(shortDramaAgentMetadataPath), true, `missing recommended file: ${shortDramaAgentMetadataPath}`);
+assert.strictEqual(fs.existsSync(mediaAgentMetadataPath), true, `missing recommended file: ${mediaAgentMetadataPath}`);
 
-const skill = fs.readFileSync(skillPath, "utf8");
-const normalizedSkill = skill.replace(/\r\n/g, "\n");
-const agentMetadata = fs.readFileSync(agentMetadataPath, "utf8");
 const shortDramaSkill = fs.readFileSync(shortDramaSkillPath, "utf8").replace(/\r\n/g, "\n");
 const shortDramaAgentMetadata = fs.readFileSync(shortDramaAgentMetadataPath, "utf8");
 const mediaSkill = fs.readFileSync(mediaSkillPath, "utf8").replace(/\r\n/g, "\n");
 const mediaAgentMetadata = fs.readFileSync(mediaAgentMetadataPath, "utf8");
 const readme = fs.readFileSync(readmePath, "utf8");
 
-assert.match(normalizedSkill, /^---\n[\s\S]*?^name:\s*pavo-skill$/m);
-assert.doesNotMatch(normalizedSkill, /^user-invocable:/m);
-assert.match(agentMetadata, /^interface:$/m);
-assert.match(agentMetadata, /\$pavo-skill/);
 assert.match(shortDramaSkill, /^---\n[\s\S]*?^name:\s*short-drama$/m);
 assert.match(shortDramaAgentMetadata, /^interface:$/m);
 assert.match(shortDramaAgentMetadata, /\$short-drama/);
-assert.match(mediaSkill, /^---\n[\s\S]*?^name:\s*pavo-media-generation$/m);
+assert.match(mediaSkill, /^---\n[\s\S]*?^name:\s*media-generation$/m);
 assert.match(mediaAgentMetadata, /^interface:$/m);
-assert.match(mediaAgentMetadata, /\$pavo-media-generation/);
-
-for (const requiredText of [
-  "pavo login",
-  "pavo upload",
-  "pavo conversation create",
-  "pavo stream",
-  "pavo download-result",
-  "GenerationSuccess",
-  "mode",
-  "design",
-	"$pavo-media-generation",
-	"--download-dir",
-	"local_path",
-	"pavo_outputs/",
-]) {
-  assert.ok(skill.includes(requiredText), `pavo skill missing contract: ${requiredText}`);
-}
+assert.match(mediaAgentMetadata, /\$media-generation/);
 
 for (const requiredText of [
   "pavo short-drama start",
   "pavo short-drama reply",
   "pavo short-drama resume",
+  "pavo short-drama list",
+  "short_drama_final",
   "conversation_id",
   "short_drama",
   "agnes-image",
@@ -93,6 +60,8 @@ for (const requiredText of [
   "pavo models --mode generate_video --online-only",
   "pavo generate image",
   "pavo generate video",
+  "pavo visuals --category images",
+  "pavo visuals --category videos",
   "creative_prompt_json",
   "agnes-image",
   "agnes-video-new",
@@ -114,7 +83,7 @@ for (const requiredText of [
 }
 assert.match(mediaSkill, /`frames_to_video`[^\n]*文生视频[^\n]*首尾帧生视频/);
 
-for (const authDocument of [skill, shortDramaSkill, mediaSkill]) {
+for (const authDocument of [shortDramaSkill, mediaSkill]) {
   for (const requiredText of ["pavo login send-code", "--country-code", "--phone-number", "--verification-code"]) {
     assert.ok(authDocument.includes(requiredText), `skill missing phone OTP contract: ${requiredText}`);
   }
@@ -125,13 +94,36 @@ for (const modelDocument of [shortDramaSkill, mediaSkill, readme]) {
   assert.doesNotMatch(modelDocument, /agnes-video(?!-new)/);
 }
 
-for (const requiredText of ["skills/pavo-skill/", "skills/pavo-media-generation/", "skills/short-drama/", "pavo short-drama start", "pavo generate image", "pavo_outputs/", "https://api.pavo-ai.cn", "pavo login send-code"]) {
+for (const requiredText of ["skills/media-generation/", "skills/short-drama/", "pavo visuals --category images", "pavo short-drama list", "pavo short-drama start", "pavo generate image", "pavo_outputs/", "https://api.pavo-ai.cn", "pavo login send-code"]) {
   assert.ok(readme.includes(requiredText), `README missing skill contract: ${requiredText}`);
+}
+for (const removedText of ["skills/pavo-skill/", "skills/pavo-media-generation/", "pavo conversation create", "pavo stream", "--mode design", '"mode": "design"']) {
+  assert.ok(!readme.includes(removedText), `README still documents removed design workflow: ${removedText}`);
 }
 
 const { installSkillsFromRoot } = require("../scripts/skills");
+const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "pavo-skills-test-"));
+const fakeUniversalSkill = path.join(fakeHome, ".agents", "skills", "pavo-skill");
+const fakeUniversalMediaSkill = path.join(fakeHome, ".agents", "skills", "pavo-media-generation");
+const fakeCodexSkills = path.join(fakeHome, ".codex", "skills");
+fs.mkdirSync(fakeUniversalSkill, { recursive: true });
+fs.mkdirSync(fakeUniversalMediaSkill, { recursive: true });
+fs.mkdirSync(fakeCodexSkills, { recursive: true });
+fs.writeFileSync(path.join(fakeUniversalSkill, "SKILL.md"), "---\nname: pavo-skill\n---\n");
+fs.writeFileSync(path.join(fakeUniversalMediaSkill, "SKILL.md"), "---\nname: pavo-media-generation\n---\n");
+fs.symlinkSync(
+  fakeUniversalSkill,
+  path.join(fakeCodexSkills, "pavo-skill"),
+  process.platform === "win32" ? "junction" : "dir",
+);
+fs.symlinkSync(
+  fakeUniversalMediaSkill,
+  path.join(fakeCodexSkills, "pavo-media-generation"),
+  process.platform === "win32" ? "junction" : "dir",
+);
 let invocation;
 installSkillsFromRoot(repoRoot, {
+  homeDir: fakeHome,
   timeout: 3210,
   run(command, args, options) {
     invocation = { command, args, options };
@@ -142,3 +134,8 @@ assert.deepStrictEqual(invocation, {
   args: ["-y", "skills", "add", repoRoot, "-g", "--all"],
   options: { timeout: 3210 },
 });
+assert.strictEqual(fs.existsSync(fakeUniversalSkill), false, "legacy universal skill was not removed");
+assert.strictEqual(fs.existsSync(fakeUniversalMediaSkill), false, "retired media skill was not removed");
+assert.strictEqual(fs.existsSync(path.join(fakeCodexSkills, "pavo-skill")), false, "legacy agent skill link was not removed");
+assert.strictEqual(fs.existsSync(path.join(fakeCodexSkills, "pavo-media-generation")), false, "retired media skill link was not removed");
+fs.rmSync(fakeHome, { recursive: true, force: true });

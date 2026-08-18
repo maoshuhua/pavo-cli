@@ -44,53 +44,6 @@ type streamCompleteOutput struct {
 	Result *api.StreamOutput `json:"result"`
 }
 
-func newStreamCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command {
-	var conversationID string
-	var prompt string
-	var filePaths []string
-	var downloadDir string
-	var raw bool
-	cmd := &cobra.Command{
-		Use:   "stream",
-		Short: "Start a PAVO design generation and reconnect if its stream drops",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			conversationID = strings.TrimSpace(conversationID)
-			prompt = strings.TrimSpace(prompt)
-			if conversationID == "" {
-				return errors.New("缺少必填参数 --conversation-id")
-			}
-			if prompt == "" {
-				return errors.New("缺少必填参数 --prompt")
-			}
-			attachments, err := uploadStreamAttachments(cmd.Context(), filePaths, deps)
-			if err != nil {
-				return err
-			}
-			result, err := runStreamWithRecovery(cmd.Context(), stdout, stderr, deps, conversationID, prompt, api.StreamOptions{
-				Mode:  api.StreamModeDesign,
-				Files: attachments,
-			}, 0, streamRunOptions{raw: raw}, true)
-			if err != nil {
-				return err
-			}
-			if err := downloadStreamResults(cmd.Context(), deps, result, downloadDir); err != nil {
-				return err
-			}
-			return output.WriteJSON(stdout, result)
-		},
-	}
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	flags := cmd.Flags()
-	flags.StringVar(&conversationID, "conversation-id", "", "conversation ID returned by conversation create")
-	flags.StringVar(&prompt, "prompt", "", "generation prompt")
-	flags.StringArrayVar(&filePaths, "file", nil, "local attachment to upload before generation; repeat for multiple files")
-	flags.StringVar(&downloadDir, "download-dir", "", "directory to save successful generated results")
-	flags.BoolVar(&raw, "raw", false, "write every raw stream event to stderr")
-	return cmd
-}
-
 func uploadStreamAttachments(ctx context.Context, paths []string, deps *dependencies) ([]api.ChatAttachment, error) {
 	attachments := make([]api.ChatAttachment, 0, len(paths))
 	for _, rawPath := range paths {
@@ -351,7 +304,7 @@ func runStreamWithRecovery(
 		if attempts >= maxAutomaticResumeAttempts {
 			return nil, fmt.Errorf("PAVO 流多次断开，仍可稍后运行 pavo resume --conversation-id %q：%w", conversationID, err)
 		}
-		wasBusy := !resume && api.IsAgentStreamBusy(err)
+		wasBusy := !resume && api.IsStreamBusy(err)
 		if wasBusy {
 			fmt.Fprintln(stderr, "已有生成任务在运行，正在连接其现有流…")
 		} else {

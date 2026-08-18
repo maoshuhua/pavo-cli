@@ -41,9 +41,9 @@ func (c *Client) ListModeSupportModels(ctx context.Context, mode ModeCode) ([]Su
 func normalizeModeCode(mode ModeCode) (ModeCode, error) {
 	normalized := ModeCode(strings.ToLower(strings.TrimSpace(string(mode))))
 	switch normalized {
-	case ModeCodeShortDrama, ModeCodeGenerateImage, ModeCodeGenerateVideo, ModeCodeDesign:
+	case ModeCodeShortDrama, ModeCodeGenerateImage, ModeCodeGenerateVideo:
 		return normalized, nil
 	default:
-		return "", errors.New("mode 必须是 short_drama、generate_image、generate_video 或 design")
+		return "", errors.New("mode 必须是 short_drama、generate_image 或 generate_video")
 	}
 }

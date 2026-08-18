@@ -161,7 +161,9 @@ func TestAPIStreamReadsNDJSONUntilGenerationSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	result, err := client.Stream(context.Background(), "conversation-1", "生成美女图", func(event *api.StreamEvent) error {
+	result, err := client.StreamWithOptions(context.Background(), "conversation-1", "生成美女图", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+	}, func(event *api.StreamEvent) error {
 		types = append(types, event.Type)
 		return nil
 	})
@@ -185,7 +187,9 @@ func TestAPIStreamReadsSSE(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	result, err := client.Stream(context.Background(), "conversation-1", "prompt", nil)
+	result, err := client.StreamWithOptions(context.Background(), "conversation-1", "prompt", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +207,9 @@ func TestAPIStreamAcceptsAgentEndAndPreservesArtifacts(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	result, err := client.Stream(context.Background(), "conversation-1", "prompt", nil)
+	result, err := client.StreamWithOptions(context.Background(), "conversation-1", "prompt", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +237,9 @@ func TestAPIStreamAggregatesMessageDeltasReviewAndAllAssets(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	result, err := client.Stream(context.Background(), "conversation-1", "prompt", nil)
+	result, err := client.StreamWithOptions(context.Background(), "conversation-1", "prompt", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +280,9 @@ func TestAPIStreamSendsNumericConversationIDAsJSONNumber(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	if _, err := client.Stream(context.Background(), "338575800850784256", "prompt", nil); err != nil {
+	if _, err := client.StreamWithOptions(context.Background(), "338575800850784256", "prompt", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -295,11 +305,14 @@ func TestAPIStreamSendsAttachments(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	_, err := client.StreamWithFiles(context.Background(), "conversation-1", "prompt", []api.ChatAttachment{{
-		MimeType: " image/jpeg ",
-		URL:      " https://public.example.test/chat/Image1.jpg ",
-		Filename: " Image1.jpg ",
-	}}, nil)
+	_, err := client.StreamWithOptions(context.Background(), "conversation-1", "prompt", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+		Files: []api.ChatAttachment{{
+			MimeType: " image/jpeg ",
+			URL:      " https://public.example.test/chat/Image1.jpg ",
+			Filename: " Image1.jpg ",
+		}},
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,9 +330,9 @@ func TestAPIStreamWithOptionsSendsShortDramaContext(t *testing.T) {
 		if body.ConversationID != "340407156788563968" || body.Prompt != "南京宣传片" || body.Mode != "short_drama" {
 			t.Fatalf("body = %#v", body)
 		}
-		if body.ExtraContext == nil || body.ExtraContext.AgentParams == nil ||
-			body.ExtraContext.AgentParams.ImageModelCode != "agnes-image" ||
-			body.ExtraContext.AgentParams.VideoModelCode != "agnes-video-new" {
+		if body.ExtraContext == nil || body.ExtraContext.ShortDramaParams == nil ||
+			body.ExtraContext.ShortDramaParams.ImageModelCode != "agnes-image" ||
+			body.ExtraContext.ShortDramaParams.VideoModelCode != "agnes-video-new" {
 			t.Fatalf("extra_context = %#v", body.ExtraContext)
 		}
 		_, _ = writer.Write([]byte(successEvent))
@@ -329,7 +342,7 @@ func TestAPIStreamWithOptionsSendsShortDramaContext(t *testing.T) {
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
 	_, err := client.StreamWithOptions(context.Background(), "340407156788563968", "南京宣传片", api.StreamOptions{
 		Mode: api.StreamModeShortDrama,
-		ExtraContext: &api.StreamExtraContext{AgentParams: &api.StreamAgentParams{
+		ExtraContext: &api.StreamExtraContext{ShortDramaParams: &api.ShortDramaModelParams{
 			ImageModelCode: "agnes-image",
 			VideoModelCode: "agnes-video-new",
 		}},
@@ -346,8 +359,10 @@ func TestAPIStreamRequiresGenerationSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(server.URL, func() (string, error) { return "stream-token", nil })
-	if _, err := client.Stream(context.Background(), "conversation-1", "prompt", nil); err == nil {
-		t.Fatal("Stream() error = nil")
+	if _, err := client.StreamWithOptions(context.Background(), "conversation-1", "prompt", api.StreamOptions{
+		Mode: api.StreamModeShortDrama,
+	}, nil); err == nil {
+		t.Fatal("StreamWithOptions() error = nil")
 	}
 }
 
@@ -439,6 +454,7 @@ func newTestClient(baseURL string, provider api.TokenProvider) *api.Client {
 		ConversationRunning: config.ConversationRunningPath,
 		PresignedURL:        config.PresignedURLPath,
 		ModeSupportModels:   config.ModeSupportModelsPath,
+		Visuals:             config.VisualsPath,
 	}, provider)
 }
 
@@ -458,7 +474,7 @@ func newStreamServer(t *testing.T, contentType string, write func(http.ResponseW
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body.ConversationID != "conversation-1" || body.Mode != "design" {
+		if body.ConversationID != "conversation-1" || body.Mode != "short_drama" {
 			t.Fatalf("body = %#v", body)
 		}
 		writer.Header().Set("Content-Type", contentType)

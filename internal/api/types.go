@@ -109,11 +109,10 @@ type FileUploadResult struct {
 	Filename    string `json:"filename"`
 }
 
-// StreamMode is the PAVO agent mode selected for a streamed turn.
+// StreamMode is the PAVO generation mode selected for a streamed turn.
 type StreamMode string
 
 const (
-	StreamModeDesign        StreamMode = "design"
 	StreamModeShortDrama    StreamMode = "short_drama"
 	StreamModeGenerateImage StreamMode = "generate_image"
 	StreamModeGenerateVideo StreamMode = "generate_video"
@@ -127,7 +126,6 @@ const (
 	ModeCodeShortDrama    ModeCode = "short_drama"
 	ModeCodeGenerateImage ModeCode = "generate_image"
 	ModeCodeGenerateVideo ModeCode = "generate_video"
-	ModeCodeDesign        ModeCode = "design"
 )
 
 // ModelTag is localized display metadata returned by Pixa.
@@ -150,6 +148,44 @@ type SupportedModel struct {
 	Type              string     `json:"type,omitempty"`
 	Tags              []ModelTag `json:"tags"`
 	Modes             []string   `json:"modes,omitempty"`
+}
+
+// VisualCategory selects one of the current user's generated-media libraries.
+type VisualCategory string
+
+const (
+	VisualCategoryImages          VisualCategory = "images"
+	VisualCategoryVideos          VisualCategory = "videos"
+	VisualCategoryShortDramaFinal VisualCategory = "short_drama_final"
+)
+
+type VisualPagination struct {
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+	Total    int `json:"total"`
+}
+
+type VisualsData struct {
+	Pagination VisualPagination `json:"pagination"`
+	Groups     []VisualGroup    `json:"groups"`
+}
+
+type VisualGroup struct {
+	Date string       `json:"date"`
+	List []VisualItem `json:"list"`
+}
+
+// VisualItem keeps category-specific metadata as raw JSON so new image,
+// video, and short-drama fields pass through without a CLI update.
+type VisualItem struct {
+	VisualID     ConversationID  `json:"visual_id"`
+	Source       string          `json:"source"`
+	ResourceID   ConversationID  `json:"resource_id"`
+	Type         string          `json:"type"`
+	URL          string          `json:"url"`
+	ThumbnailURL string          `json:"thumbnail_url"`
+	CreatedAt    string          `json:"created_at"`
+	Metadata     json.RawMessage `json:"metadata"`
 }
 
 // StreamOptions configures one new streamed turn. Resume calls never reuse
@@ -183,15 +219,15 @@ type MediaReference struct {
 	URL string `json:"url"`
 }
 
-// StreamExtraContext contains optional agent-specific configuration accepted
+// StreamExtraContext contains optional mode-specific configuration accepted
 // by the PAVO chat stream endpoint.
 type StreamExtraContext struct {
-	AgentParams *StreamAgentParams `json:"agent_params,omitempty"`
+	ShortDramaParams *ShortDramaModelParams `json:"agent_params,omitempty"`
 }
 
-// StreamAgentParams selects the image and video models used by a short-drama
-// turn. Both model codes are required whenever agent_params is sent.
-type StreamAgentParams struct {
+// ShortDramaModelParams selects the image and video models used by a
+// short-drama turn. Both model codes are required by the backend contract.
+type ShortDramaModelParams struct {
 	ImageModelCode string `json:"image_model_code,omitempty"`
 	VideoModelCode string `json:"video_model_code,omitempty"`
 }

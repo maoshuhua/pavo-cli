@@ -19,6 +19,7 @@ const (
 	ConversationRunningPath = "/api/v1/chat/conversation/running"
 	PresignedURLPath        = "/api/v1/file/presigned-url"
 	ModeSupportModelsPath   = "/api/v1/pixa/mode_support_models"
+	VisualsPath             = "/api/v1/visuals"
 
 	EnvAPIBaseURL       = "PAVO_API_BASE_URL"
 	EnvAccessToken      = "PAVO_ACCESS_TOKEN"
@@ -46,6 +47,7 @@ type Paths struct {
 	ConversationRunning string
 	PresignedURL        string
 	ModeSupportModels   string
+	Visuals             string
 }
 
 func Load() *Config {
@@ -69,6 +71,7 @@ func Load() *Config {
 			ConversationRunning: ConversationRunningPath,
 			PresignedURL:        PresignedURLPath,
 			ModeSupportModels:   ModeSupportModelsPath,
+			Visuals:             VisualsPath,
 		},
 	}
 }

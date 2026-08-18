@@ -1,7 +1,7 @@
 {
   "name": "@pavo-dev/cli",
   "version": "0.1.3",
-  "description": "PAVO CLI and desktop-agent skill",
+  "description": "PAVO CLI with media-generation and short-drama skills",
   "bin": {
     "pavo": "scripts/run.js"
   },

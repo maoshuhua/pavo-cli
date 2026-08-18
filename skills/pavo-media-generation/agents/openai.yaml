@@ -1,4 +1,0 @@
-interface:
-  display_name: "PAVO 图像与视频生成"
-  short_description: "查询 Pixa 可用模型，并通过 PAVO 生成或编辑图像与视频"
-  default_prompt: "Use $pavo-media-generation to query current Pixa models and create or edit an image or video with PAVO."

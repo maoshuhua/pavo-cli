@@ -36,9 +36,9 @@ func TestCLIShortDramaStartThenReplyUsesOneConversation(t *testing.T) {
 			if body.ConversationID != conversationID || body.Mode != string(api.StreamModeShortDrama) {
 				t.Fatalf("stream body = %#v", body)
 			}
-			if body.ExtraContext == nil || body.ExtraContext.AgentParams == nil ||
-				body.ExtraContext.AgentParams.ImageModelCode != "agnes-image" ||
-				body.ExtraContext.AgentParams.VideoModelCode != "agnes-video-new" {
+			if body.ExtraContext == nil || body.ExtraContext.ShortDramaParams == nil ||
+				body.ExtraContext.ShortDramaParams.ImageModelCode != "agnes-image" ||
+				body.ExtraContext.ShortDramaParams.VideoModelCode != "agnes-video-new" {
 				t.Fatalf("extra_context = %#v", body.ExtraContext)
 			}
 			if streamCalls == 1 && body.Prompt != "南京宣传片" {

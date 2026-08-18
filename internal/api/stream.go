@@ -20,29 +20,15 @@ var ErrStreamEndedWithoutTerminal = errors.New("stream 已结束，但没有收�
 // IsRecoverableStreamError identifies errors for which a client can safely
 // reconnect through Resume without creating another generation request.
 func IsRecoverableStreamError(err error) bool {
-	if err == nil || IsAgentStreamBusy(err) || errors.Is(err, ErrStreamEndedWithoutTerminal) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.DeadlineExceeded) {
+	if err == nil || IsStreamBusy(err) || errors.Is(err, ErrStreamEndedWithoutTerminal) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.DeadlineExceeded) {
 		return err != nil
 	}
 	var networkErr net.Error
 	return errors.As(err, &networkErr)
 }
 
-func (c *Client) Stream(ctx context.Context, conversationID, prompt string, handler EventHandler) (*StreamOutput, error) {
-	return c.StreamWithOptions(ctx, conversationID, prompt, StreamOptions{
-		Mode: StreamModeDesign,
-	}, handler)
-}
-
-// StreamWithFiles starts a design generation with optional uploaded chat attachments.
-func (c *Client) StreamWithFiles(ctx context.Context, conversationID, prompt string, files []ChatAttachment, handler EventHandler) (*StreamOutput, error) {
-	return c.StreamWithOptions(ctx, conversationID, prompt, StreamOptions{
-		Mode:  StreamModeDesign,
-		Files: files,
-	}, handler)
-}
-
-// StreamWithOptions starts a streamed PAVO turn with an explicit agent mode.
-// It is shared by design, short-drama, image, and video commands.
+// StreamWithOptions starts a streamed PAVO generation with an explicit mode.
+// It is shared by short-drama, image, and video commands.
 func (c *Client) StreamWithOptions(ctx context.Context, conversationID, prompt string, options StreamOptions, handler EventHandler) (*StreamOutput, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	prompt = strings.TrimSpace(prompt)
@@ -207,17 +193,17 @@ func normalizeStreamExtraContext(extraContext *StreamExtraContext) (*StreamExtra
 	if extraContext == nil {
 		return nil, nil
 	}
-	if extraContext.AgentParams == nil {
+	if extraContext.ShortDramaParams == nil {
 		return nil, errors.New("extra_context.agent_params 不能为空")
 	}
-	params := &StreamAgentParams{
-		ImageModelCode: strings.TrimSpace(extraContext.AgentParams.ImageModelCode),
-		VideoModelCode: strings.TrimSpace(extraContext.AgentParams.VideoModelCode),
+	params := &ShortDramaModelParams{
+		ImageModelCode: strings.TrimSpace(extraContext.ShortDramaParams.ImageModelCode),
+		VideoModelCode: strings.TrimSpace(extraContext.ShortDramaParams.VideoModelCode),
 	}
 	if params.ImageModelCode == "" || params.VideoModelCode == "" {
 		return nil, errors.New("extra_context.agent_params 需要 image_model_code 和 video_model_code")
 	}
-	return &StreamExtraContext{AgentParams: params}, nil
+	return &StreamExtraContext{ShortDramaParams: params}, nil
 }
 
 func normalizeCreativeGenerationOptions(mode StreamMode, creative *CreativeGenerationOptions) (*CreativeGenerationOptions, error) {

@@ -18,10 +18,10 @@ import (
 type TokenProvider func() (string, error)
 
 const (
-	pavoPlatform        = "1"
-	pavoUserAgent       = "PAVO-CLI/1.0"
-	phoneAuthScene      = "phone_auth"
-	AgentStreamBusyCode = "070301"
+	pavoPlatform   = "1"
+	pavoUserAgent  = "PAVO-CLI/1.0"
+	phoneAuthScene = "phone_auth"
+	StreamBusyCode = "070301"
 )
 
 type Client struct {
@@ -165,11 +165,11 @@ func (c *Client) CreateConversation(ctx context.Context, prompt string) (string,
 	return conversationID, nil
 }
 
-// IsAgentStreamBusy reports whether the service rejected a second stream
+// IsStreamBusy reports whether the service rejected a second stream
 // submission because this conversation already has one in progress.
-func IsAgentStreamBusy(err error) bool {
+func IsStreamBusy(err error) bool {
 	var apiErr *APIError
-	return errors.As(err, &apiErr) && apiErr.Code == AgentStreamBusyCode
+	return errors.As(err, &apiErr) && apiErr.Code == StreamBusyCode
 }
 
 // GetConversationStatus returns the lightweight Redis-backed running state for

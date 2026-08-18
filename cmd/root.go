@@ -63,7 +63,7 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	root := &cobra.Command{
 		Use:           "pavo",
 		Short:         "PAVO CLI",
-		Long:          "PAVO CLI for desktop agents: discover models and stream design, image, video, and short-drama generation.",
+		Long:          "PAVO CLI for desktop clients: discover models, query personal creations, and generate images, videos, and short dramas.",
 		Version:       version.Current(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -74,9 +74,9 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	root.SetErr(stderr)
 	root.AddCommand(newLoginCommand(stdout, stderr, deps))
 	root.AddCommand(newConversationCommand(stdout, stderr, deps))
-	root.AddCommand(newStreamCommand(stdout, stderr, deps))
 	root.AddCommand(newShortDramaCommand(stdout, stderr, deps))
 	root.AddCommand(newModelsCommand(stdout, stderr, deps))
+	root.AddCommand(newVisualsCommand(stdout, stderr, deps))
 	root.AddCommand(newGenerateCommand(stdout, stderr, deps))
 	root.AddCommand(newResumeCommand(stdout, stderr, deps))
 	root.AddCommand(newUploadCommand(stdout, stderr, deps))

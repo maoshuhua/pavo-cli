@@ -93,7 +93,7 @@ function main(override) {
       timeout: 120000,
       env: { ...process.env, PAVO_CLI_SKIP_SKILLS: "1" },
     });
-    console.log("Installing PAVO desktop-agent skill...");
+    console.log("Installing PAVO skills...");
     installGlobalPackageSkills(DEFAULT_PKG);
   } finally {
     materialized.cleanup();
@@ -104,7 +104,7 @@ function main(override) {
     throw new Error("PAVO CLI was installed, but the pavo command was not found in npm PATH");
   }
   console.log(`PAVO CLI is ready: ${bin}`);
-  console.log('Try: pavo conversation create --prompt "生成一张美女图"');
+  console.log('Try: pavo generate image --prompt "生成一张美女图"');
 }
 
 if (require.main === module) {
