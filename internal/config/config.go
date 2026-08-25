@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	DefaultBaseURL     = "https://api.pavo-ai.cn"
+	DefaultBaseURL     = "https://api-pavo-test.pavo-ai.cn"
+	DefaultAppBaseURL  = "https://app-test.pavo-ai.cn"
 	DefaultHTTPTimeout = 10 * time.Minute
 
 	SendPhoneCodePath       = "/api/v1/user/code/send"
@@ -22,6 +23,7 @@ const (
 	VisualsPath             = "/api/v1/visuals"
 
 	EnvAPIBaseURL       = "PAVO_API_BASE_URL"
+	EnvAppBaseURL       = "PAVO_APP_BASE_URL"
 	EnvAccessToken      = "PAVO_ACCESS_TOKEN"
 	EnvVerificationCode = "PAVO_VERIFICATION_CODE"
 	EnvHTTPTimeout      = "PAVO_HTTP_TIMEOUT"
@@ -30,6 +32,7 @@ const (
 
 type Config struct {
 	BaseURL          string
+	AppBaseURL       string
 	HTTPTimeout      time.Duration
 	AccessToken      string
 	VerificationCode string
@@ -55,8 +58,10 @@ func Load() *Config {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	appBaseURL := resolveAppBaseURL(os.Getenv(EnvAppBaseURL), baseURL)
 	return &Config{
 		BaseURL:          baseURL,
+		AppBaseURL:       appBaseURL,
 		HTTPTimeout:      resolveTimeout(os.Getenv(EnvHTTPTimeout)),
 		AccessToken:      strings.TrimSpace(os.Getenv(EnvAccessToken)),
 		VerificationCode: os.Getenv(EnvVerificationCode),
@@ -73,6 +78,20 @@ func Load() *Config {
 			ModeSupportModels:   ModeSupportModelsPath,
 			Visuals:             VisualsPath,
 		},
+	}
+}
+
+func resolveAppBaseURL(raw, apiBaseURL string) string {
+	if value := strings.TrimRight(strings.TrimSpace(raw), "/"); value != "" {
+		return value
+	}
+	switch strings.ToLower(strings.TrimRight(strings.TrimSpace(apiBaseURL), "/")) {
+	case "https://api.pavo-ai.cn":
+		return "https://app.pavo-ai.cn"
+	case "https://api-pavo-test.pavo-ai.cn":
+		return DefaultAppBaseURL
+	default:
+		return DefaultAppBaseURL
 	}
 }
 

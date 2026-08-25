@@ -1,6 +1,6 @@
 # PAVO CLI
 
-PAVO 桌面端创作 CLI。项目提供十项业务能力：
+PAVO 桌面端创作 CLI。项目提供十一项业务能力：
 
 1. 通过手机号短信验证码登录。
 2. 上传聊天附件并获取可展示的公共地址。
@@ -12,8 +12,9 @@ PAVO 桌面端创作 CLI。项目提供十项业务能力：
 8. 创建、续写、恢复和查询多轮短剧会话。
 9. 按短剧、生图或生视频模式动态查询当前支持的模型。
 10. 通过 Pixa 创意流生成或编辑基础图像与视频。
+11. 创建、绑定和操作 Pixa 无限画布项目、节点、连线与生成任务。
 
-仓库包含 `skills/media-generation/` 与 `skills/short-drama/`。npm 安装和更新时会把这两份 PAVO Skill 安装到桌面端的全局技能目录。
+仓库包含 `skills/canvas/`、`skills/media-generation/` 与 `skills/short-drama/`。npm 安装和更新时会把这三份 PAVO Skill 安装到桌面端的全局技能目录。
 
 ## 安装
 
@@ -69,8 +70,8 @@ pavo login \
 验证码与登录接口：
 
 ```http
-POST https://api.pavo-ai.cn/api/v1/user/code/send
-POST https://api.pavo-ai.cn/api/v1/user/auth/phone-otp
+POST https://api-pavo-test.pavo-ai.cn/api/v1/user/code/send
+POST https://api-pavo-test.pavo-ai.cn/api/v1/user/auth/phone-otp
 ```
 
 CLI 分别发送以下请求体：
@@ -112,6 +113,92 @@ Authorization: Bearer <access_token>
 ```
 
 查询完成后，CLI 使用受控并发下载每项资产，默认并发数为 4，可通过 `--download-concurrency` 在 1–32 范围内调整。不指定 `--download-dir` 时，默认保存到当前工作区的 `pavo_outputs/visuals/<category>/`。输出保留服务端的 `pagination`、按日期组织的 `groups[].list[]` 与完整 `metadata`，并返回 `downloaded`、`failed` 计数。下载成功的条目写入绝对 `local_path`；单项失败只在该条目写入 `download_error` 原因，不中断其他资产下载，也不影响成功资产展示。
+
+## Pixa 无限画布
+
+列出或创建画布项目，并把当前工作区绑定到目标画布：
+
+```bash
+pavo canvas project list
+pavo canvas project create --title "产品视觉方案" --use
+pavo canvas status
+```
+
+绑定写入当前工作区的 `.pavo/canvas.json`，只保存 `project_uuid`、`canvas_uuid` 和客户端 session，不包含 Access Token。绑定后可省略每条命令的 `--project` / `--canvas`。
+
+`project list/create/duplicate/show`、`use/status`、单节点运行和 DAG 输出会附带 `canvas_url`。测试 API 默认对应 `https://app-test.pavo-ai.cn`，网页路由使用数值 `project_id`，并把 `canvas_uuid`、`project_uuid` 放在查询参数中。
+
+节点与连线使用前端相同的 batch 数据契约。CLI 每次写入前读取最新画布版本；遇到明确的版本冲突只重新读取并重放一次，同时保留节点 `data` 中 CLI 不认识的新字段：
+
+```bash
+pavo canvas node create \
+  --type image \
+  --name "主视觉" \
+  --prompt "清晨海边的产品主视觉" \
+  --model "MODEL_CODE"
+pavo canvas upload --file "C:\path\reference.png" --name "参考图"
+pavo canvas edge add --source "参考图" --target "主视觉"
+pavo canvas node list
+pavo canvas edge list
+```
+
+可按前端坐标语义创建或解除 group。Codex/脚本批量搭图时，`apply --stdin` 接收一行一个 JSON object 的 NDJSON，先完整校验再用一次 `nodes/batch` 原子提交；`--dry-run` 不修改画布：
+
+```bash
+pavo canvas group create "参考图" "主视觉" --name "主视觉组"
+pavo canvas group ungroup "主视觉组" --yes
+pavo canvas apply --stdin --dry-run < workflow.ndjson
+pavo canvas apply --stdin < workflow.ndjson
+```
+
+NDJSON 只包含节点、连线和分组等图结构操作，不混入上传、生成或 artifact 删除。流中存在删除或解组时，实际提交必须传 `--yes`。
+
+图片、视频或音频节点传 `--model` 时，CLI 会实时验证模型是否存在、在线且对当前账号可用，并按该模型 constraints 写入前端运行所需的 `modeType`、默认比例/分辨率、图片数量或视频时长。
+
+画布模型和文本工具动态来自 Pixa：
+
+```bash
+pavo canvas model list --scene canvas_image
+pavo canvas model list --scene canvas_video
+pavo canvas model list --scene canvas_audio
+pavo canvas tool-specs
+```
+
+运行节点会按前端约定回写节点执行态和最终 URL/文本结果，确保网页刷新后仍能恢复和展示。命令默认等待生成终态；传 `--download` 后，成功资源默认保存到当前工作区 `pavo_outputs/canvas/<task_id>/`，也可用 `--output-dir` 指定目录。输出中的每个成功结果增加绝对 `local_path`，单项下载失败只增加 `download_error`，不会改变生成任务的成功状态。异步提交用 `--wait=false`，再按返回的 `task_id` 查询、等待或取消；异步模式不能同时下载。生成提交不会自动重试，避免重复创建任务：
+
+```bash
+pavo canvas run "主视觉" --download
+pavo canvas run "主视觉" --download --output-dir "C:\workspace\pavo_outputs\canvas\task-name"
+pavo canvas task status "TASK_ID"
+pavo canvas task wait "TASK_ID" --timeout 30m
+pavo canvas task cancel "TASK_ID"
+```
+
+多个生成节点存在依赖时，使用 DAG 计划统一做环检测、拓扑排序并固定节点参数摘要。`plan` 不创建任务；执行时引用同一个 `plan_id`：
+
+```bash
+pavo canvas dag plan --group "主视觉组"
+pavo canvas dag plan --target "最终视频"
+pavo canvas dag plan --all
+pavo canvas dag run --plan "PLAN_ID" --max-parallel 4 --download
+pavo canvas dag status "RUN_ID"
+pavo canvas dag resume "RUN_ID"
+```
+
+DAG 发现依赖环会直接报告环路径并停止。执行前会重新校验图和参数，变化时返回 `replan_required`。同层节点受 `--max-parallel` 控制并行；上游失败只跳过其后代，独立分支继续。`.pavo/canvas-plans/` 与 `.pavo/canvas-runs/` 保存本地计划和恢复清单，不含 Token；恢复复用每个节点原始的幂等 request ID。
+
+画布历史产物可按日期组查询和下载，也可以按节点资源保存到“我的资产”：
+
+```bash
+pavo canvas artifact list --category videos --page 1 --page-size 5
+pavo canvas artifact list --download-dir "C:\workspace\canvas-artifacts"
+pavo canvas artifact save "最终视频" --resource-index 0 --name "最终成片"
+pavo canvas artifact delete "ARTIFACT_UUID" --yes
+```
+
+Artifact 列表的 `page_size` 与 `pagination.total` 都按“有产物的日期组”计算。删除是幂等软删历史记录，不删除节点当前资源、已保存资产或对象存储；批量最多 100 个 UUID。
+
+删除项目、节点、连线、group 或 artifact 历史记录需要显式 `--yes`。完整命令、NDJSON 与节点 data 约定见 `skills/canvas/references/`。
 
 ## 查询支持的模型
 
@@ -293,19 +380,22 @@ CLI 先向 PAVO API 获取预签名上传地址，再直接 PUT 文件到对象�
 
 ## 桌面端 Skills
 
-基础图像/视频技能位于 `skills/media-generation/SKILL.md`，短剧技能位于 `skills/short-drama/SKILL.md`。
+无限画布技能位于 `skills/canvas/SKILL.md`，基础图像/视频技能位于 `skills/media-generation/SKILL.md`，短剧技能位于 `skills/short-drama/SKILL.md`。
 
-`media-generation` 使用 `pavo visuals` 查询当前登录人的图片或视频，使用 `pavo models` 查询实时模型目录，再调用 `pavo generate image` 或 `pavo generate video`。本地参考素材由命令自动上传；生成任务复用统一的流恢复、结果下载和实时资产输出能力。
+`canvas` 使用 `pavo canvas` 管理画布项目和工作区绑定，并按前端兼容格式操作节点、连线、group、NDJSON 批量变更、DAG 生成和历史产物。单节点按用户明确要求直接运行；多节点 DAG 由 `canvas dag plan` 固定拓扑、节点参数和 `plan_hash` 后执行。Skill 会主动返回 CLI 输出的 `canvas_url`。它不会绕过 CLI 直接请求 Pixa，也不会把普通图片/视频生成混入画布任务。
+
+`media-generation` 使用 `pavo visuals` 查询当前登录人的图片或视频，使用 `pavo models` 查询实时模型目录，并在用户明确要求生成时调用 `pavo generate image` 或 `pavo generate video`。本地参考素材由命令自动上传；生成任务复用统一的流恢复、结果下载和实时资产输出能力。
 
 用户明确要求上传聊天附件时，Skill 会单独调用 `pavo upload --file <本地路径>` 并返回其 `public_url`。媒体生成命令通过可重复的 `--image`、`--video`、`--audio` 接收本地素材并自动上传；短剧命令通过可重复的 `--file` 绑定附件。
 
-`short-drama` 使用 `pavo short-drama list` 查询当前登录人的短剧成片，使用 `pavo short-drama start` 创建首轮短剧会话，并用 `pavo short-drama reply` 在相同 `conversation_id` 上继续多轮对话。它只转交用户原始创作需求与服务端问题，不替用户决定剧情、风格、角色或镜头。
+`short-drama` 使用 `pavo short-drama list` 查询当前登录人的短剧成片，使用 `pavo short-drama start` 创建首轮短剧会话，并用 `pavo short-drama reply` 在相同 `conversation_id` 上继续多轮对话。纯阶段推进不因计费信息暂停；涉及剧情、风格、角色或镜头等创作选择时仍转交用户决定。
 
 ## 配置
 
 | 环境变量 | 说明 |
 | --- | --- |
-| `PAVO_API_BASE_URL` | API 基础地址，默认 `https://api.pavo-ai.cn` |
+| `PAVO_API_BASE_URL` | API 基础地址，默认 `https://api-pavo-test.pavo-ai.cn` |
+| `PAVO_APP_BASE_URL` | 网页应用基础地址，测试 API 默认映射为 `https://app-test.pavo-ai.cn`，生产 API 映射为 `https://app.pavo-ai.cn` |
 | `PAVO_ACCESS_TOKEN` | 临时覆盖本地保存的 Access Token |
 | `PAVO_VERIFICATION_CODE` | 非交互手机号登录使用的本次短信验证码 |
 | `PAVO_HTTP_TIMEOUT` | HTTP 和生成流超时，默认 `10m` |

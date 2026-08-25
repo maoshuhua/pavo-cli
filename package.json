@@ -1,7 +1,7 @@
 {
   "name": "@pavo-dev/cli",
   "version": "0.1.4",
-  "description": "PAVO CLI with media-generation and short-drama skills",
+  "description": "PAVO CLI with canvas, media-generation, and short-drama skills",
   "bin": {
     "pavo": "scripts/run.js"
   },

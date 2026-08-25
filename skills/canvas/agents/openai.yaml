@@ -1,0 +1,4 @@
+interface:
+  display_name: "PAVO 无限画布"
+  short_description: "操作 PAVO 画布、DAG 工作流和历史产物"
+  default_prompt: "使用 $canvas 在 PAVO 无限画布中搭建或整理工作流，按依赖执行、管理产物并返回网页画布链接。"

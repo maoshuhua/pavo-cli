@@ -9,6 +9,7 @@ import (
 
 func TestConfigUsesDefaults(t *testing.T) {
 	t.Setenv(config.EnvAPIBaseURL, "")
+	t.Setenv(config.EnvAppBaseURL, "")
 	t.Setenv(config.EnvAccessToken, "")
 	t.Setenv(config.EnvVerificationCode, "")
 	t.Setenv(config.EnvHTTPTimeout, "")
@@ -18,8 +19,11 @@ func TestConfigUsesDefaults(t *testing.T) {
 	if cfg.BaseURL != config.DefaultBaseURL {
 		t.Fatalf("BaseURL = %q, want %q", cfg.BaseURL, config.DefaultBaseURL)
 	}
-	if cfg.BaseURL != "https://api.pavo-ai.cn" {
-		t.Fatalf("BaseURL = %q, want production PAVO API", cfg.BaseURL)
+	if cfg.BaseURL != "https://api-pavo-test.pavo-ai.cn" {
+		t.Fatalf("BaseURL = %q, want test PAVO API", cfg.BaseURL)
+	}
+	if cfg.AppBaseURL != "https://app-test.pavo-ai.cn" {
+		t.Fatalf("AppBaseURL = %q, want test PAVO app", cfg.AppBaseURL)
 	}
 	if cfg.HTTPTimeout != config.DefaultHTTPTimeout {
 		t.Fatalf("HTTPTimeout = %s, want %s", cfg.HTTPTimeout, config.DefaultHTTPTimeout)
@@ -44,6 +48,7 @@ func TestConfigUsesDefaults(t *testing.T) {
 
 func TestConfigReadsEnvironment(t *testing.T) {
 	t.Setenv(config.EnvAPIBaseURL, " https://example.test/ ")
+	t.Setenv(config.EnvAppBaseURL, " https://app.example.test/ ")
 	t.Setenv(config.EnvAccessToken, " test-token ")
 	t.Setenv(config.EnvVerificationCode, " 654321 ")
 	t.Setenv(config.EnvHTTPTimeout, "45s")
@@ -51,6 +56,9 @@ func TestConfigReadsEnvironment(t *testing.T) {
 	cfg := config.Load()
 	if cfg.BaseURL != "https://example.test" {
 		t.Fatalf("BaseURL = %q", cfg.BaseURL)
+	}
+	if cfg.AppBaseURL != "https://app.example.test" {
+		t.Fatalf("AppBaseURL = %q", cfg.AppBaseURL)
 	}
 	if cfg.AccessToken != "test-token" {
 		t.Fatalf("AccessToken = %q", cfg.AccessToken)
@@ -60,5 +68,15 @@ func TestConfigReadsEnvironment(t *testing.T) {
 	}
 	if cfg.HTTPTimeout.String() != "45s" {
 		t.Fatalf("HTTPTimeout = %s", cfg.HTTPTimeout)
+	}
+}
+
+func TestConfigMapsProductionAPIToProductionApp(t *testing.T) {
+	t.Setenv(config.EnvAPIBaseURL, "https://api.pavo-ai.cn/")
+	t.Setenv(config.EnvAppBaseURL, "")
+
+	cfg := config.Load()
+	if cfg.AppBaseURL != "https://app.pavo-ai.cn" {
+		t.Fatalf("AppBaseURL = %q", cfg.AppBaseURL)
 	}
 }

@@ -21,17 +21,37 @@ func TestCLIBusinessCommandsAreLimitedToProvidedCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"login", "conversation", "short-drama", "models", "visuals", "generate", "resume", "upload", "download-result", "update"} {
+	for _, name := range []string{"login", "conversation", "short-drama", "models", "visuals", "generate", "resume", "upload", "download-result", "canvas", "update"} {
 		command, _, findErr := root.Find([]string{name})
 		if findErr != nil || command.Name() != name {
 			t.Fatalf("missing command %q: command=%v err=%v", name, command, findErr)
 		}
 	}
-	for _, removed := range []string{"stream", "generate-image", "generate-video", "get-thread"} {
+	for _, removed := range []string{"stream", "generate-image", "generate-video", "get-thread", "credits"} {
 		command, _, findErr := root.Find([]string{removed})
 		if findErr == nil && command.Name() == removed {
 			t.Fatalf("unexpected removed command %q", removed)
 		}
+	}
+	canvas, _, err := root.Find([]string{"canvas"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canvasChildren := map[string]bool{}
+	for _, child := range canvas.Commands() {
+		canvasChildren[child.Name()] = true
+	}
+	for _, required := range []string{"group", "apply", "dag", "artifact"} {
+		if !canvasChildren[required] {
+			t.Fatalf("missing canvas phase-2 command %q", required)
+		}
+	}
+	if canvasChildren["power"] {
+		t.Fatal("unexpected removed command \"canvas power\"")
+	}
+	root.SetArgs([]string{"canvas", "power", "demo"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("removed command \"canvas power\" unexpectedly succeeded")
 	}
 	conversation, _, err := root.Find([]string{"conversation"})
 	if err != nil {

@@ -81,6 +81,7 @@ func newRootCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Command
 	root.AddCommand(newResumeCommand(stdout, stderr, deps))
 	root.AddCommand(newUploadCommand(stdout, stderr, deps))
 	root.AddCommand(newDownloadResultCommand(stdout, stderr, deps))
+	root.AddCommand(newCanvasCommand(stdout, stderr, deps))
 	root.AddCommand(updatecmd.NewCommand(stdout, stderr))
 	localizeFlagErrors(root)
 	return root

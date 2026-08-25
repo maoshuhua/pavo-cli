@@ -4,7 +4,7 @@ const path = require("path");
 const { run, runSilent } = require("./platform");
 
 const DEFAULT_PKG = "@pavo-dev/cli";
-const RETIRED_SKILLS = ["pavo-skill", "pavo-media-generation"];
+const RETIRED_SKILLS = ["pavo-skill", "pavo-media-generation", "pavo-canvas"];
 
 function isRetiredSkillDirectory(candidate, skillName) {
   try {

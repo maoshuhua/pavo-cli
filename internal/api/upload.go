@@ -25,10 +25,51 @@ type uploadFileMetadata struct {
 // UploadFile uploads a local file through PAVO's presigned URL flow and returns
 // the stable public URL. The temporary signed URL is never returned to callers.
 func (c *Client) UploadFile(ctx context.Context, path string) (*FileUploadResult, error) {
+	return c.UploadFileWithPurpose(ctx, path, chatAttachmentPurpose)
+}
+
+// UploadCanvasFile uploads an image, video, or audio file using the UGC
+// purpose expected by canvas nodes.
+func (c *Client) UploadCanvasFile(ctx context.Context, path string) (*FileUploadResult, error) {
 	metadata, err := inspectUploadFile(path)
 	if err != nil {
 		return nil, err
 	}
+	purpose, err := canvasUploadPurpose(metadata.contentType)
+	if err != nil {
+		return nil, err
+	}
+	return c.uploadFileWithMetadata(ctx, metadata, purpose)
+}
+
+// UploadFileWithPurpose exposes the presigned upload flow to API features that
+// require a purpose other than chat_attachment.
+func (c *Client) UploadFileWithPurpose(ctx context.Context, path, purpose string) (*FileUploadResult, error) {
+	metadata, err := inspectUploadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	purpose = strings.TrimSpace(purpose)
+	if purpose == "" {
+		return nil, errors.New("上传 purpose 不能为空")
+	}
+	return c.uploadFileWithMetadata(ctx, metadata, purpose)
+}
+
+func canvasUploadPurpose(contentType string) (string, error) {
+	switch {
+	case strings.HasPrefix(contentType, "image/"):
+		return "ugc_image", nil
+	case strings.HasPrefix(contentType, "video/"):
+		return "ugc_video", nil
+	case strings.HasPrefix(contentType, "audio/"):
+		return "ugc_audio", nil
+	default:
+		return "", fmt.Errorf("画布仅支持图片、视频或音频文件，实际 Content-Type 为 %q", contentType)
+	}
+}
+
+func (c *Client) uploadFileWithMetadata(ctx context.Context, metadata uploadFileMetadata, purpose string) (*FileUploadResult, error) {
 
 	var response struct {
 		Code    string           `json:"code"`
@@ -36,7 +77,7 @@ func (c *Client) UploadFile(ctx context.Context, path string) (*FileUploadResult
 		Data    PresignedURLData `json:"data"`
 	}
 	if err := c.doJSON(ctx, http.MethodPost, c.paths.PresignedURL, PresignedURLRequest{
-		Purpose:     chatAttachmentPurpose,
+		Purpose:     purpose,
 		ContentType: metadata.contentType,
 		Filename:    metadata.filename,
 	}, true, &response); err != nil {

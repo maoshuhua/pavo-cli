@@ -44,6 +44,8 @@ pavo models --mode short_drama --type image --online-only
 pavo models --mode short_drama --type video --online-only
 ```
 
+用户已经明确要求生成或编辑时，选定符合输入能力的在线模型后直接提交 `pavo generate`。不执行积分估算，也不额外暂停；用户只要求查询、比较或设计方案时不要创建生成任务。
+
 ## 生成或编辑图像
 
 文生图：
