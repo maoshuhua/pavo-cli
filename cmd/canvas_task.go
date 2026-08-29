@@ -38,6 +38,15 @@ type canvasRunOutput struct {
 	SyncError   string `json:"sync_error,omitempty"`
 }
 
+type canvasNodeRunOptions struct {
+	Wait      bool
+	Force     bool
+	Download  bool
+	OutputDir string
+	Interval  time.Duration
+	Timeout   time.Duration
+}
+
 func taskOutput(progress api.CanvasGenerationProgress) canvasTaskOutput {
 	return canvasTaskOutput{
 		TaskID:       strings.TrimSpace(string(progress.TaskID)),
@@ -134,6 +143,79 @@ func syncCanvasRunNode(ctx context.Context, deps *dependencies, scope canvascore
 	return err
 }
 
+func executeCanvasNodeRun(ctx context.Context, stderr io.Writer, deps *dependencies, scope canvascore.Scope, nodeRef string, options canvasNodeRunOptions) (*canvasRunOutput, error) {
+	options.Download = options.Download || strings.TrimSpace(options.OutputDir) != ""
+	if options.Download && !options.Wait {
+		return nil, errors.New("--download/--output-dir 需要等待任务终态，不能与 --wait=false 同时使用")
+	}
+	detail, err := deps.api.GetCanvasProjectDetail(ctx, scope.ProjectUUID, scope.CanvasUUID)
+	if err != nil {
+		return nil, err
+	}
+	node, err := canvascore.FindNode(detail, nodeRef)
+	if err != nil {
+		return nil, err
+	}
+	data, err := canvascore.NodeData(*node)
+	if err != nil {
+		return nil, err
+	}
+	if !canvascore.IsNodeExecutable(*node) {
+		return nil, fmt.Errorf("节点 %s 不可执行", node.NodeKey)
+	}
+	if taskID, ok := data["task_id"].(string); ok && taskID != "" && taskID != "-1" && !options.Force {
+		return nil, fmt.Errorf("节点已有 task_id %s；如确认要重复提交请传 --force", taskID)
+	}
+	requestID, err := canvascore.RequestID()
+	if err != nil {
+		return nil, err
+	}
+	canvasUUID := strings.TrimSpace(scope.CanvasUUID)
+	if canvasUUID == "" {
+		canvasUUID = detail.CurrentCanvas.CanvasUUID
+	}
+	projectID := canvascore.ProjectIDFromDetail(detail)
+	canvasURL := canvascore.BuildURL(deps.config.AppBaseURL, projectID, scope.ProjectUUID, canvasUUID)
+	created, err := deps.api.CreateCanvasGeneration(ctx, scope.ProjectUUID, api.CreateCanvasGenerationRequest{
+		NodeKey: node.NodeKey, RequestID: requestID, CanvasUUID: canvasUUID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	taskID := created.EffectiveTaskID()
+	syncErr := syncCanvasRunNode(ctx, deps, scope, node.NodeKey, func(data map[string]any, _ string) {
+		canvascore.ApplyGenerationStart(data, *created)
+	})
+	if syncErr != nil {
+		fmt.Fprintf(stderr, "warning: task %s 已创建，但回写节点执行状态失败: %v\n", taskID, syncErr)
+	}
+	if !options.Wait {
+		return &canvasRunOutput{ProjectID: projectID, ProjectUUID: scope.ProjectUUID, CanvasUUID: canvasUUID, CanvasURL: canvasURL, NodeKey: node.NodeKey, Task: created, SyncError: errorText(syncErr)}, nil
+	}
+	waitContext, cancel, err := contextWithTaskTimeout(ctx, options.Timeout)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	progress, err := waitCanvasTask(waitContext, deps, stderr, taskID, options.Interval)
+	if err != nil {
+		return nil, err
+	}
+	terminalSyncErr := syncCanvasRunNode(ctx, deps, scope, node.NodeKey, func(data map[string]any, nodeType string) {
+		canvascore.ApplyGenerationTerminal(data, nodeType, *progress)
+	})
+	if terminalSyncErr != nil {
+		fmt.Fprintf(stderr, "warning: task %s 已结束，但回写节点结果失败: %v\n", taskID, terminalSyncErr)
+	}
+	task := taskOutput(*progress)
+	if options.Download {
+		if err := downloadCanvasTaskResults(ctx, deps, &task, taskID, node.Name, options.OutputDir); err != nil {
+			return nil, err
+		}
+	}
+	return &canvasRunOutput{ProjectID: projectID, ProjectUUID: scope.ProjectUUID, CanvasUUID: canvasUUID, CanvasURL: canvasURL, NodeKey: node.NodeKey, Task: task, SyncError: errorText(terminalSyncErr)}, nil
+}
+
 func newCanvasRunCommand(stdout, stderr io.Writer, deps *dependencies, options *canvasScopeOptions) *cobra.Command {
 	var wait bool
 	var force bool
@@ -145,82 +227,15 @@ func newCanvasRunCommand(stdout, stderr io.Writer, deps *dependencies, options *
 		Short: "Create a generation task for one executable canvas node",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			download = download || strings.TrimSpace(outputDir) != ""
-			if download && !wait {
-				return errors.New("--download/--output-dir 需要等待任务终态，不能与 --wait=false 同时使用")
-			}
 			scope, err := resolveCanvasScope(options)
 			if err != nil {
 				return err
 			}
-			detail, err := deps.api.GetCanvasProjectDetail(command.Context(), scope.ProjectUUID, scope.CanvasUUID)
+			result, err := executeCanvasNodeRun(command.Context(), stderr, deps, scope, args[0], canvasNodeRunOptions{Wait: wait, Force: force, Download: download, OutputDir: outputDir, Interval: interval, Timeout: timeout})
 			if err != nil {
 				return err
 			}
-			node, err := canvascore.FindNode(detail, args[0])
-			if err != nil {
-				return err
-			}
-			data, err := canvascore.NodeData(*node)
-			if err != nil {
-				return err
-			}
-			if !canvascore.IsNodeExecutable(*node) {
-				return fmt.Errorf("节点 %s 不可执行", node.NodeKey)
-			}
-			if taskID, ok := data["task_id"].(string); ok && taskID != "" && taskID != "-1" && !force {
-				return fmt.Errorf("节点已有 task_id %s；如确认要重复提交请传 --force", taskID)
-			}
-			requestID, err := canvascore.RequestID()
-			if err != nil {
-				return err
-			}
-			canvasUUID := strings.TrimSpace(scope.CanvasUUID)
-			if canvasUUID == "" {
-				canvasUUID = detail.CurrentCanvas.CanvasUUID
-			}
-			projectID := canvascore.ProjectIDFromDetail(detail)
-			canvasURL := canvascore.BuildURL(deps.config.AppBaseURL, projectID, scope.ProjectUUID, canvasUUID)
-			created, err := deps.api.CreateCanvasGeneration(command.Context(), scope.ProjectUUID, api.CreateCanvasGenerationRequest{
-				NodeKey:    node.NodeKey,
-				RequestID:  requestID,
-				CanvasUUID: canvasUUID,
-			})
-			if err != nil {
-				return err
-			}
-			taskID := created.EffectiveTaskID()
-			syncErr := syncCanvasRunNode(command.Context(), deps, scope, node.NodeKey, func(data map[string]any, _ string) {
-				canvascore.ApplyGenerationStart(data, *created)
-			})
-			if syncErr != nil {
-				fmt.Fprintf(stderr, "warning: task %s 已创建，但回写节点执行状态失败: %v\n", taskID, syncErr)
-			}
-			if !wait {
-				return output.WriteJSON(stdout, canvasRunOutput{ProjectID: projectID, ProjectUUID: scope.ProjectUUID, CanvasUUID: canvasUUID, CanvasURL: canvasURL, NodeKey: node.NodeKey, Task: created, SyncError: errorText(syncErr)})
-			}
-			waitContext, cancel, err := contextWithTaskTimeout(command.Context(), timeout)
-			if err != nil {
-				return err
-			}
-			defer cancel()
-			progress, err := waitCanvasTask(waitContext, deps, stderr, taskID, interval)
-			if err != nil {
-				return err
-			}
-			terminalSyncErr := syncCanvasRunNode(command.Context(), deps, scope, node.NodeKey, func(data map[string]any, nodeType string) {
-				canvascore.ApplyGenerationTerminal(data, nodeType, *progress)
-			})
-			if terminalSyncErr != nil {
-				fmt.Fprintf(stderr, "warning: task %s 已结束，但回写节点结果失败: %v\n", taskID, terminalSyncErr)
-			}
-			task := taskOutput(*progress)
-			if download {
-				if err := downloadCanvasTaskResults(command.Context(), deps, &task, taskID, node.Name, outputDir); err != nil {
-					return err
-				}
-			}
-			return output.WriteJSON(stdout, canvasRunOutput{ProjectID: projectID, ProjectUUID: scope.ProjectUUID, CanvasUUID: canvasUUID, CanvasURL: canvasURL, NodeKey: node.NodeKey, Task: task, SyncError: errorText(terminalSyncErr)})
+			return output.WriteJSON(stdout, result)
 		},
 	}
 	flags := command.Flags()

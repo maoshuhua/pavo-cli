@@ -100,6 +100,8 @@ func newCanvasNodeCreateCommand(stdout, stderr io.Writer, deps *dependencies, op
 	var model string
 	var dataJSON string
 	var mediaType string
+	var skills []string
+	var promptSegments string
 	var x, y, width, height float64
 	command := &cobra.Command{
 		Use:   "create",
@@ -121,6 +123,16 @@ func newCanvasNodeCreateCommand(stdout, stderr io.Writer, deps *dependencies, op
 				}
 				if modelErr := canvascore.ApplyModelConfiguration(data, nodeType, model, modelOptions); modelErr != nil {
 					return modelErr
+				}
+			}
+			if command.Flags().Changed("prompt-segments") {
+				if err := canvascore.ReplacePromptSegments(data, promptSegments); err != nil {
+					return err
+				}
+			}
+			for _, skill := range skills {
+				if err := canvascore.AddSkillPrompt(data, skill); err != nil {
+					return err
 				}
 			}
 			scope, err := resolveCanvasScope(options)
@@ -158,6 +170,8 @@ func newCanvasNodeCreateCommand(stdout, stderr io.Writer, deps *dependencies, op
 	flags.StringVar(&nodeType, "type", "", "node type: text, image, video, audio, upload, directorNode, videoComposition, or group")
 	flags.StringVar(&name, "name", "", "node title; defaults to the next frontend-style title")
 	flags.StringVar(&prompt, "prompt", "", "text prompt to put in data.params.prompt")
+	flags.StringSliceVar(&skills, "skill", nil, "skill code to prepend to prompt segments; may be repeated")
+	flags.StringVar(&promptSegments, "prompt-segments", "", "replace prompt segments with an explicit JSON array")
 	flags.StringVar(&model, "model", "", "model code to put in data.params.model")
 	flags.StringVar(&mediaType, "media-type", "image", "upload media type: image, video, or audio")
 	flags.StringVar(&dataJSON, "data", "{}", "additional node data as a JSON object")
@@ -172,6 +186,8 @@ func newCanvasNodeCreateCommand(stdout, stderr io.Writer, deps *dependencies, op
 
 func newCanvasNodeUpdateCommand(stdout, stderr io.Writer, deps *dependencies, options *canvasScopeOptions) *cobra.Command {
 	var name, prompt, model, dataJSON string
+	var promptSegments string
+	var skills []string
 	var replaceData bool
 	var unset []string
 	var x, y, width, height float64
@@ -180,7 +196,7 @@ func newCanvasNodeUpdateCommand(stdout, stderr io.Writer, deps *dependencies, op
 		Short: "Merge changes into a node without discarding unknown data fields",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			if !command.Flags().Changed("name") && !command.Flags().Changed("prompt") && !command.Flags().Changed("model") && !command.Flags().Changed("data") && len(unset) == 0 && !command.Flags().Changed("x") && !command.Flags().Changed("y") && !command.Flags().Changed("width") && !command.Flags().Changed("height") {
+			if !command.Flags().Changed("name") && !command.Flags().Changed("prompt") && !command.Flags().Changed("prompt-segments") && len(skills) == 0 && !command.Flags().Changed("model") && !command.Flags().Changed("data") && len(unset) == 0 && !command.Flags().Changed("x") && !command.Flags().Changed("y") && !command.Flags().Changed("width") && !command.Flags().Changed("height") {
 				return errors.New("没有要更新的字段")
 			}
 			patch, err := canvascore.ParseObject(dataJSON)
@@ -217,6 +233,16 @@ func newCanvasNodeUpdateCommand(stdout, stderr io.Writer, deps *dependencies, op
 				}
 				if command.Flags().Changed("prompt") {
 					canvascore.SetPrompt(data, string(node.NodeType), prompt)
+				}
+				if command.Flags().Changed("prompt-segments") {
+					if replaceErr := canvascore.ReplacePromptSegments(data, promptSegments); replaceErr != nil {
+						return nil, replaceErr
+					}
+				}
+				for _, skill := range skills {
+					if skillErr := canvascore.AddSkillPrompt(data, skill); skillErr != nil {
+						return nil, skillErr
+					}
 				}
 				if command.Flags().Changed("model") {
 					if scene := canvascore.ModelScene(string(node.NodeType)); scene != "" {
@@ -268,7 +294,9 @@ func newCanvasNodeUpdateCommand(stdout, stderr io.Writer, deps *dependencies, op
 	}
 	flags := command.Flags()
 	flags.StringVar(&name, "name", "", "new node title")
-	flags.StringVar(&prompt, "prompt", "", "new prompt; an empty value clears prompt segments")
+	flags.StringVar(&prompt, "prompt", "", "replace text prompt segments; an empty value clears text but preserves skill/media segments")
+	flags.StringSliceVar(&skills, "skill", nil, "skill code to prepend to prompt segments; may be repeated")
+	flags.StringVar(&promptSegments, "prompt-segments", "", "replace all prompt segments with an explicit JSON array")
 	flags.StringVar(&model, "model", "", "new model code")
 	flags.StringVar(&dataJSON, "data", "{}", "node data patch as a JSON object")
 	flags.BoolVar(&replaceData, "replace-data", false, "replace data instead of merging; node_key is always preserved")

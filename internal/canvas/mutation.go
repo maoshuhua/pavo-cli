@@ -42,6 +42,9 @@ func ApplyMutation(ctx context.Context, client MutationClient, scope Scope, buil
 		if canvasUUID == "" {
 			return nil, errors.New("画布详情缺少 current_canvas.canvas_uuid")
 		}
+		if BatchRequestEmpty(request) {
+			return &api.CanvasBatchResult{Version: detail.Version}, nil
+		}
 		request.CanvasUUID = canvasUUID
 		request.Version = int64(detail.Version)
 		request.SessionID = scope.SessionID

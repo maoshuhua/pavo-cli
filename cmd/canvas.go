@@ -53,6 +53,9 @@ func newCanvasCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.Comma
 	command.AddCommand(newCanvasUploadCommand(stdout, stderr, deps, scopeOptions))
 	command.AddCommand(newCanvasModelCommand(stdout, stderr, deps))
 	command.AddCommand(newCanvasToolSpecsCommand(stdout, stderr, deps))
+	command.AddCommand(newCanvasShortcutCommand(stdout, stderr, deps, scopeOptions))
+	command.AddCommand(newCanvasStoryboardCommand(stdout, stderr, deps, scopeOptions))
+	command.AddCommand(newCanvasValidateCommand(stdout, stderr, deps, scopeOptions))
 	command.AddCommand(newCanvasRunCommand(stdout, stderr, deps, scopeOptions))
 	command.AddCommand(newCanvasTaskCommand(stdout, stderr, deps))
 	return command
@@ -214,6 +217,36 @@ func newCanvasModelCommand(stdout, stderr io.Writer, deps *dependencies) *cobra.
 	list.SetOut(stdout)
 	list.SetErr(stderr)
 	command.AddCommand(list)
+	command.AddCommand(newCanvasModelExplainCommand("show", stdout, stderr, deps))
+	command.AddCommand(newCanvasModelExplainCommand("explain", stdout, stderr, deps))
+	command.SetOut(stdout)
+	command.SetErr(stderr)
+	return command
+}
+
+func newCanvasModelExplainCommand(name string, stdout, stderr io.Writer, deps *dependencies) *cobra.Command {
+	var scene string
+	command := &cobra.Command{
+		Use:   name + " MODEL",
+		Short: "Show one live model with normalized constraints and effective CLI defaults",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			scene = strings.TrimSpace(scene)
+			if scene == "" {
+				return errors.New("缺少必填参数 --scene")
+			}
+			data, err := deps.api.GetCanvasModelOptions(command.Context(), scene)
+			if err != nil {
+				return err
+			}
+			explanation, err := canvascore.ExplainCanvasModel(data, scene, args[0])
+			if err != nil {
+				return err
+			}
+			return output.WriteJSON(stdout, explanation)
+		},
+	}
+	command.Flags().StringVar(&scene, "scene", "", "scene code, for example canvas_image, canvas_video, or canvas_audio")
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	return command

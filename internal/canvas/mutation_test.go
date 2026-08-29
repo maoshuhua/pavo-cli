@@ -46,3 +46,16 @@ func TestApplyMutationRebuildsOnceAfterExplicitConflict(t *testing.T) {
 		t.Fatalf("versions = %#v", client.versions)
 	}
 }
+
+func TestApplyMutationTreatsEmptyDiffAsIdempotentSuccess(t *testing.T) {
+	client := &conflictOnceClient{}
+	result, err := ApplyMutation(context.Background(), client, Scope{ProjectUUID: "project-1", SessionID: "session-1"}, func(_ *api.CanvasProjectDetail) (*api.CanvasBatchRequest, error) {
+		return NewBatchRequest(), nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Version != 7 || client.detailCalls != 1 || client.batchCalls != 0 {
+		t.Fatalf("result=%#v detail=%d batch=%d", result, client.detailCalls, client.batchCalls)
+	}
+}

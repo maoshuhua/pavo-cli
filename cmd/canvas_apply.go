@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/maoshuhua/pavo-cli/internal/api"
@@ -46,13 +47,25 @@ func ndjsonModelConfigurator(ctx context.Context, deps *dependencies) canvascore
 
 func newCanvasApplyCommand(stdout, stderr io.Writer, deps *dependencies, options *canvasScopeOptions) *cobra.Command {
 	var stdin, dryRun, yes bool
+	var file string
 	command := &cobra.Command{
-		Use: "apply", Short: "Atomically apply graph mutations from stdin NDJSON", Args: cobra.NoArgs,
+		Use: "apply", Short: "Atomically apply graph mutations from stdin or an NDJSON file", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			if !stdin {
-				return errors.New("当前只支持 --stdin")
+			if stdin == (strings.TrimSpace(file) != "") {
+				return errors.New("必须且只能传 --stdin 或 --file 之一")
 			}
-			operations, err := canvascore.ParseNDJSON(command.InOrStdin())
+			reader := command.InOrStdin()
+			var opened *os.File
+			if strings.TrimSpace(file) != "" {
+				var err error
+				opened, err = os.Open(file)
+				if err != nil {
+					return err
+				}
+				defer opened.Close()
+				reader = opened
+			}
+			operations, err := canvascore.ParseNDJSON(reader)
 			if err != nil {
 				return err
 			}
@@ -96,6 +109,7 @@ func newCanvasApplyCommand(stdout, stderr io.Writer, deps *dependencies, options
 		},
 	}
 	command.Flags().BoolVar(&stdin, "stdin", false, "read one JSON operation per line from stdin")
+	command.Flags().StringVar(&file, "file", "", "read one JSON operation per line from an NDJSON file")
 	command.Flags().BoolVar(&dryRun, "dry-run", false, "validate and print the batch without mutating the canvas")
 	command.Flags().BoolVar(&yes, "yes", false, "confirm destructive operations present in the NDJSON stream")
 	command.SetOut(stdout)

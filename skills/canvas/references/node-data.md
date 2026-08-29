@@ -22,7 +22,7 @@ CLI 按 `pavo-app-front` 当前 batch 格式写入完整节点：`nodeKey`、`ty
 
 ## Prompt 与 params
 
-`--prompt` 写入标准片段数组：
+`--prompt` 写入标准片段数组；更新时只替换 `type=text` 的片段，并保留 skill/media 片段：
 
 ```json
 {
@@ -59,6 +59,10 @@ Prompt 片段还可表达画布内引用或工具：
 ```
 
 优先通过画布连线表达节点依赖。只有实时 tool specs 或现有节点明确使用片段时，才手工写 `skill` / 媒体片段。
+
+`node create/update --skill CODE` 会去重并把 skill segment 放在 text 前；`--prompt-segments JSON_ARRAY` 明确替换整个数组。前端 preset 优先用 `canvas shortcut apply`，不要直接猜 skill code。
+
+结构化分镜存储在 text 节点的 `data.pavo_storyboard`，Schema 版本为 `pavo.storyboard/v1`。人物在 `characters[]`，产品/道具/车辆等固定非人物主体在 `subjects[]`，镜头分别用 `character_ids` / `subject_ids` 引用；build 产物使用 `data.pavo_storyboard_asset` 记录所属 storyboard node、shot ID 和 image/video kind，group 使用 `data.pavo_storyboard_group`。这些字段由 `canvas storyboard` 管理，不手工拼接。
 
 ## 连线派生字段
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "PAVO 无限画布"
-  short_description: "操作 PAVO 画布、DAG 工作流和历史产物"
-  default_prompt: "使用 $canvas 在 PAVO 无限画布中搭建或整理工作流，按依赖执行、管理产物并返回网页画布链接。"
+  short_description: "操作 PAVO 画布、结构化分镜、DAG 和产物"
+  default_prompt: "使用 $canvas 先匹配最接近的完整案例，在 PAVO 无限画布中应用实时 preset 或结构化 storyboard，校验工作流，按依赖执行、管理产物并返回网页画布链接。"

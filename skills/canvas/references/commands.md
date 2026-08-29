@@ -2,6 +2,8 @@
 
 所有命令输出单行 JSON 到 stdout。`PROJECT_ID`、`PROJECT_UUID`、`CANVAS_UUID`、`NODE_KEY`、`TASK_ID` 以命令实际输出为准。项目、绑定、单节点运行和 DAG 输出中的 `canvas_url` 可直接在浏览器打开；URL 路径使用数值 `project_id`，查询参数使用两个 UUID。
 
+本文是参数契约速查。需要从真实用户请求到验收结果的完整闭环时，先从 [examples/README.md](../examples/README.md) 选择一个 case。
+
 ## 项目与工作区绑定
 
 ```bash
@@ -28,11 +30,14 @@ pavo canvas node get "NODE_KEY_OR_EXACT_TITLE"
 pavo canvas node create \
   --type image \
   --name "主视觉" \
+  --skill "OPTIONAL_LIVE_SKILL_CODE" \
   --prompt "PROMPT" \
   --model "MODEL_CODE" \
   --x 100 --y 80
 
 pavo canvas node update "NODE" --prompt "NEW_PROMPT" --model "MODEL_CODE"
+pavo canvas node update "NODE" --skill "LIVE_SKILL_CODE"
+pavo canvas node update "NODE" --prompt-segments '[{"type":"skill","code":"LIVE_SKILL_CODE"},{"type":"text","content":"PROMPT"}]'
 pavo canvas node update "NODE" --data '{"params":{"count":1}}'
 pavo canvas node update "NODE" --unset generation_error_code
 pavo canvas node delete "NODE" --yes
@@ -41,6 +46,8 @@ pavo canvas node delete "NODE" --yes
 支持的 `--type`：`text`、`image`、`video`、`audio`、`upload`、`directorNode`、`videoComposition`、`group`。省略坐标时，新节点放到当前最右节点右侧；省略名称时使用与前端一致的自增标题。
 
 对图片、视频或音频节点传 `--model` 时，CLI 会重新查询对应 scene，拒绝不存在、离线或当前账号不可用的模型，并按实时 constraints 写入 `modeType`、默认比例/分辨率、图片数量或视频时长。用户在 `--data.params` 中提供且仍受模型支持的设置会保留；不支持的组合回落到实时配置的首个可用值。
+
+`--prompt` 只替换 text segment，保留已有 skill/media segment；`--skill` 可重复并去重后置于 prompt 前部；`--prompt-segments` 才替换整个 segment 数组。
 
 `node update --data` 默认只合并 data 顶层字段，并保留后端返回的未知字段。只有确实需要替换整个 data 时才加 `--replace-data`；CLI 仍会保留 `node_key`。嵌套对象不是递归合并，例如传入 `{"params":...}` 会替换完整 `params`，因此先读取节点并带齐需要保留的 params。
 
@@ -64,11 +71,13 @@ pavo canvas group create "NODE_A" "NODE_B" --name "镜头组"
 pavo canvas group ungroup "GROUP" --yes
 pavo canvas apply --stdin --dry-run < workflow.ndjson
 pavo canvas apply --stdin < workflow.ndjson
+pavo canvas apply --file workflow.ndjson --dry-run
+pavo canvas apply --file workflow.ndjson
 ```
 
 `group create` 会拆平被选中的已有 group，按前端相同的 32px 边距创建新 group，并把成员绝对坐标转换为组内相对坐标。`group ungroup` 恢复绝对坐标。
 
-`apply --stdin` 一行读取一个 JSON object，全部解析、结构校验成功后才发出一次原子 batch；`--dry-run` 只输出待提交 batch。流中含 `node.delete`、`edge.delete` 或 `group.ungroup` 时必须增加 `--yes`。完整操作格式见 [automation.md](automation.md)。
+`apply` 必须且只能传 `--stdin` 或 `--file`。一行读取一个 JSON object，全部解析、结构校验成功后才发出一次原子 batch；`--dry-run` 只输出待提交 batch。流中含 `node.delete`、`edge.delete` 或 `group.ungroup` 时必须增加 `--yes`。完整操作格式见 [automation.md](automation.md)。
 
 ## 模型、工具和生成任务
 
@@ -76,7 +85,14 @@ pavo canvas apply --stdin < workflow.ndjson
 pavo canvas model list --scene canvas_image
 pavo canvas model list --scene canvas_video
 pavo canvas model list --scene canvas_audio
+pavo canvas model show "MODEL_CODE" --scene canvas_image
+pavo canvas model explain "MODEL_CODE" --scene canvas_video
 pavo canvas tool-specs
+pavo canvas shortcut list --kind skill --type image
+pavo canvas shortcut show "SHORTCUT_CODE"
+pavo canvas shortcut apply "SHORTCUT_CODE" --source "NODE" --dry-run
+pavo canvas shortcut apply "GUIDE_CODE" --input "INPUT_KEY=NODE"
+pavo canvas validate --all --strict
 
 pavo canvas run "NODE" --download
 pavo canvas run "NODE" --download --output-dir "ABSOLUTE_OUTPUT_DIRECTORY"
@@ -86,6 +102,8 @@ pavo canvas task wait "TASK_ID" --interval 3s --timeout 30m
 pavo canvas task cancel "TASK_ID"
 ```
 
+`model list` 用于发现实时 code；选定后用 `model show` 或等价的 `model explain` 查看规范化 `constraints`、`available`、CLI 将采用的 `effective_defaults` 以及输入/时长建议。`raw` 保留该模型服务端返回的完整对象，遇到 CLI 尚未认识的新约束时以它为准。不要仅凭模型名称猜 `modeType`、比例、分辨率或视频时长。
+
 `run` 会把已创建的 `task_id`、执行态和最终 URL/文本结果按前端约定回写节点，使网页刷新后仍能恢复和展示。默认轮询至成功或失败，stdout 最终 JSON 的 `task.task_result` 已从后端的 JSON 字符串解码为对象。
 
 传 `--download` 时，成功资源默认保存到当前工作区 `pavo_outputs/canvas/TASK_ID/`；`--output-dir` 可指定其他目录，并会隐式启用下载。每个结果保留远程 `url`，下载成功增加绝对 `local_path`，单项失败增加 `download_error` 并继续处理其他结果。`--download` / `--output-dir` 不能与 `--wait=false` 同时使用。
@@ -93,6 +111,32 @@ pavo canvas task cancel "TASK_ID"
 任务失败也会正常输出 `failed: true`、`error_code` / `error_message`，调用者必须检查，不要仅凭命令退出码判定生成成功。若任务已创建但节点 batch 回写失败，JSON 会保留任务并给出 `sync_error`；按 `task_id` 查询，不要重复运行。
 
 如果节点已有非 `-1` 的 `task_id`，`run` 会拒绝重复提交。`--force` 只适合用户已确认旧任务确实失效的情况，不能作为普通重试方式。
+
+Shortcut 从实时 `tool-specs` 归一 `guide` / `skill` / `mode`。skill 用 `--source`，guide 根据 `shortcut show` 的 `required_inputs[].key` 重复传 `--input KEY=NODE`，mode 用 `--target`。默认只原子修改图；`--run` 才执行返回的 `run_node_key`，`--download` 下载结果。完整说明见 [shortcuts.md](shortcuts.md)。
+
+`canvas validate [NODE]` 或 `--all` 校验图拓扑、prompt segments、实时 skill/model 和 storyboard Schema。默认输出结构化问题；`--strict` 在 error 存在时返回非零状态。warning（例如依赖服务端默认模型）不会把 `valid` 置为 false。
+
+## 结构化 Storyboard
+
+```bash
+pavo canvas storyboard schema
+pavo canvas storyboard profile list
+pavo canvas storyboard profile show cinematic
+pavo canvas storyboard template --profile cinematic --shots 8 --output storyboard.json
+pavo canvas storyboard lint storyboard.json --strict
+pavo canvas storyboard compile storyboard.json --kind all --strict --output prompts.json
+pavo canvas storyboard create --profile cinematic --title "TITLE" --brief "BRIEF" --shots 8
+pavo canvas storyboard generate "STORYBOARD_NODE"
+pavo canvas storyboard finalize "STORYBOARD_NODE"
+pavo canvas storyboard show "STORYBOARD_NODE"
+pavo canvas storyboard validate "STORYBOARD_NODE" --strict
+pavo canvas storyboard import storyboard.json
+pavo canvas storyboard export "STORYBOARD_NODE" --output storyboard.json
+pavo canvas storyboard build "STORYBOARD_NODE" --image-model "MODEL" --dry-run --strict
+pavo canvas storyboard build "STORYBOARD_NODE" --image-model "MODEL" --with-video --video-model "MODEL" --strict
+```
+
+`template/lint/compile` 全部离线运行：template 给出可编辑骨架，lint 区分 Schema error、阻塞严格质量检查的 warning，以及不阻塞但建议补参考资产的 advisory；compile 输出 build 将写入每镜节点的最终 prompt。`create` 创建严格 JSON 请求节点；`generate` 等同于运行该节点并 finalize；已单独执行 `canvas run` 时只需 `finalize`。`build` 按稳定 shot ID 同步图片/视频节点、提示词、引用边与 group，不执行生成；重复执行且无需更新时返回 `changed:false`。完整 Schema 与闭环见 [storyboard.md](storyboard.md)。
 
 ## DAG 计划、执行与恢复
 

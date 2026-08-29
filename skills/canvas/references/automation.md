@@ -7,6 +7,8 @@
 ```bash
 pavo canvas apply --stdin --dry-run < workflow.ndjson
 pavo canvas apply --stdin < workflow.ndjson
+pavo canvas apply --file workflow.ndjson --dry-run
+pavo canvas apply --file workflow.ndjson
 ```
 
 支持的图操作：
@@ -32,7 +34,7 @@ pavo canvas apply --stdin < workflow.ndjson
 
 连线可用字段除 `source,target,id` 外，还包括 handles、port types、`role`、`media_order`、`connection_type`、`color_key`、`selectable`、`deletable` 与 `style`。Group 可设置 `members,name,mode_code,border,fill,padding`。
 
-NDJSON 只修改画布图。上传文件、模型查询、生成任务与 artifact 删除不能加入流，因为这些操作不能与 `nodes/batch` 构成同一个事务。含删除或解组 op 的实际提交要传 `--yes`。
+NDJSON 只修改画布图。上传文件、模型查询、生成任务与 artifact 删除不能加入流，因为这些操作不能与 `nodes/batch` 构成同一个事务。`--file` 适合可审阅、可复用的工作流，`--stdin` 适合临时管道；两者不能同时传。含删除或解组 op 的实际提交要传 `--yes`。
 
 ## DAG 范围与计划
 

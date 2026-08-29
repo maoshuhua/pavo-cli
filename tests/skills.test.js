@@ -16,6 +16,9 @@ const canvasAgentMetadataPath = path.join(repoRoot, "skills", "canvas", "agents"
 const canvasCommandsPath = path.join(repoRoot, "skills", "canvas", "references", "commands.md");
 const canvasNodeDataPath = path.join(repoRoot, "skills", "canvas", "references", "node-data.md");
 const canvasAutomationPath = path.join(repoRoot, "skills", "canvas", "references", "automation.md");
+const canvasStoryboardPath = path.join(repoRoot, "skills", "canvas", "references", "storyboard.md");
+const canvasExamplesDir = path.join(repoRoot, "skills", "canvas", "examples");
+const canvasExamplesIndexPath = path.join(canvasExamplesDir, "README.md");
 const readmePath = path.join(repoRoot, "README.md");
 
 assert.strictEqual(fs.existsSync(removedSkillDir), false, "removed pavo-skill directory remains");
@@ -32,6 +35,8 @@ assert.strictEqual(fs.existsSync(canvasAgentMetadataPath), true, `missing recomm
 assert.strictEqual(fs.existsSync(canvasCommandsPath), true, `missing required file: ${canvasCommandsPath}`);
 assert.strictEqual(fs.existsSync(canvasNodeDataPath), true, `missing required file: ${canvasNodeDataPath}`);
 assert.strictEqual(fs.existsSync(canvasAutomationPath), true, `missing required file: ${canvasAutomationPath}`);
+assert.strictEqual(fs.existsSync(canvasStoryboardPath), true, `missing required file: ${canvasStoryboardPath}`);
+assert.strictEqual(fs.existsSync(canvasExamplesIndexPath), true, `missing required file: ${canvasExamplesIndexPath}`);
 
 const shortDramaSkill = fs.readFileSync(shortDramaSkillPath, "utf8").replace(/\r\n/g, "\n");
 const shortDramaAgentMetadata = fs.readFileSync(shortDramaAgentMetadataPath, "utf8");
@@ -42,6 +47,8 @@ const canvasAgentMetadata = fs.readFileSync(canvasAgentMetadataPath, "utf8");
 const canvasCommands = fs.readFileSync(canvasCommandsPath, "utf8");
 const canvasNodeData = fs.readFileSync(canvasNodeDataPath, "utf8");
 const canvasAutomation = fs.readFileSync(canvasAutomationPath, "utf8");
+const canvasStoryboard = fs.readFileSync(canvasStoryboardPath, "utf8");
+const canvasExamplesIndex = fs.readFileSync(canvasExamplesIndexPath, "utf8");
 const readme = fs.readFileSync(readmePath, "utf8");
 
 assert.match(shortDramaSkill, /^---\n[\s\S]*?^name:\s*short-drama$/m);
@@ -53,6 +60,61 @@ assert.match(mediaAgentMetadata, /\$media-generation/);
 assert.match(canvasSkill, /^---\n[\s\S]*?^name:\s*canvas$/m);
 assert.match(canvasAgentMetadata, /^interface:$/m);
 assert.match(canvasAgentMetadata, /\$canvas/);
+assert.ok(canvasSkill.includes("examples/README.md"), "canvas skill does not route to examples index");
+
+const canvasExampleCases = [
+  "workflow/workspace-setup.md",
+  "workflow/upload-create-run.md",
+  "workflow/character-setting-shortcut.md",
+  "workflow/first-last-frame-guide.md",
+  "workflow/offline-storyboard-quality.md",
+  "workflow/storyboard-to-images.md",
+  "workflow/storyboard-to-video-dag.md",
+  "workflow/existing-graph-dag-run.md",
+  "workflow/ndjson-atomic-workflow.md",
+  "workflow/artifact-download.md",
+  "node-types/text.md",
+  "node-types/image.md",
+  "node-types/video.md",
+  "node-types/audio.md",
+  "node-types/upload.md",
+  "node-types/storyboard.md",
+  "failures/validation-errors.md",
+  "failures/generation-resume.md",
+  "failures/dag-replan-required.md",
+];
+for (const relative of canvasExampleCases) {
+  const casePath = path.join(canvasExamplesDir, ...relative.split("/"));
+  assert.strictEqual(fs.existsSync(casePath), true, `missing canvas example case: ${relative}`);
+  assert.ok(canvasExamplesIndex.includes(`(${relative})`), `canvas examples index does not link case: ${relative}`);
+  const content = fs.readFileSync(casePath, "utf8");
+  assert.ok(content.includes("**用户请求**"), `canvas example lacks user request: ${relative}`);
+  assert.ok(content.includes("**覆盖**"), `canvas example lacks stated coverage: ${relative}`);
+  assert.ok(content.includes("**前置条件**"), `canvas example lacks preconditions: ${relative}`);
+  assert.ok(content.includes("**输出与验收**"), `canvas example lacks observable acceptance criteria: ${relative}`);
+  assert.ok(content.includes("**失败处理**"), `canvas example lacks failure handling: ${relative}`);
+  assert.ok(content.includes("pavo canvas"), `canvas example has no executable canvas command: ${relative}`);
+  assert.match(content, /```(?:bash|ndjson)/, `canvas example has no fenced command/data block: ${relative}`);
+}
+
+function markdownFiles(root) {
+  const result = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const candidate = path.join(root, entry.name);
+    if (entry.isDirectory()) result.push(...markdownFiles(candidate));
+    else if (entry.isFile() && entry.name.endsWith(".md")) result.push(candidate);
+  }
+  return result;
+}
+
+for (const markdownPath of markdownFiles(path.join(repoRoot, "skills", "canvas"))) {
+  const content = fs.readFileSync(markdownPath, "utf8");
+  for (const match of content.matchAll(/\[[^\]]+\]\(([^)#]+\.md)(?:#[^)]+)?\)/g)) {
+    if (/^[a-z]+:/i.test(match[1])) continue;
+    const target = path.resolve(path.dirname(markdownPath), ...match[1].split("/"));
+    assert.strictEqual(fs.existsSync(target), true, `broken canvas skill link: ${markdownPath} -> ${match[1]}`);
+  }
+}
 
 for (const requiredText of [
   "pavo canvas status",
@@ -61,12 +123,16 @@ for (const requiredText of [
   "pavo canvas node list",
   "pavo canvas edge list",
   "pavo canvas model list",
+  "pavo canvas model show",
   "pavo canvas tool-specs",
   "pavo canvas run",
   "pavo canvas dag plan",
   "pavo canvas dag run",
   "pavo canvas artifact list",
   "pavo canvas apply --stdin",
+  "pavo canvas apply --file",
+  "storyboard lint",
+  "storyboard compile",
   ".pavo/canvas.json",
   "canvas_url",
   "不自动重试",
@@ -80,6 +146,12 @@ for (const document of [canvasSkill, mediaSkill, shortDramaSkill, canvasCommands
 }
 for (const requiredText of ["node create", "node update", "canvas upload", "edge add", "task wait", "--wait=false", "--download", "--output-dir", "local_path", "download_error", "pavo_outputs/canvas/", "--force", "--yes"]) {
   assert.ok(canvasCommands.includes(requiredText), `canvas commands reference missing contract: ${requiredText}`);
+}
+for (const requiredText of ["storyboard profile list", "storyboard template", "storyboard lint", "storyboard compile", "model show", "apply --file", "changed:false"]) {
+  assert.ok(canvasCommands.includes(requiredText), `canvas commands reference missing quality contract: ${requiredText}`);
+}
+for (const requiredText of ["quality_ready", "advisory", "reference_node_keys", "subjects", "subject_ids", "changed:false", "--strict"]) {
+  assert.ok(canvasStoryboard.includes(requiredText), `canvas storyboard reference missing quality contract: ${requiredText}`);
 }
 for (const requiredText of ["node.create", "edge.add", "group.create", "$alias", "connection_list", "content_hash", "plan_hash", "replan_required", "canvas_url", "request ID", "canvas dag resume"]) {
   assert.ok(canvasAutomation.includes(requiredText), `canvas automation reference missing contract: ${requiredText}`);

@@ -149,6 +149,8 @@ pavo canvas group create "参考图" "主视觉" --name "主视觉组"
 pavo canvas group ungroup "主视觉组" --yes
 pavo canvas apply --stdin --dry-run < workflow.ndjson
 pavo canvas apply --stdin < workflow.ndjson
+pavo canvas apply --file workflow.ndjson --dry-run
+pavo canvas apply --file workflow.ndjson
 ```
 
 NDJSON 只包含节点、连线和分组等图结构操作，不混入上传、生成或 artifact 删除。流中存在删除或解组时，实际提交必须传 `--yes`。
@@ -161,8 +163,44 @@ NDJSON 只包含节点、连线和分组等图结构操作，不混入上传、�
 pavo canvas model list --scene canvas_image
 pavo canvas model list --scene canvas_video
 pavo canvas model list --scene canvas_audio
+pavo canvas model show "MODEL_CODE" --scene canvas_image
+pavo canvas model explain "MODEL_CODE" --scene canvas_video
 pavo canvas tool-specs
 ```
+
+实时 `tool-specs` 中的 guide、skill 和 mode 可作为 shortcut 发现和原子应用。CLI 会保留组合式 prompt 中的 skill/media segments、校验模型，并按模板创建节点、连线与 group：
+
+```bash
+pavo canvas shortcut list
+pavo canvas shortcut show character_setting
+pavo canvas shortcut apply character_setting \
+  --source "角色参考图" \
+  --prompt "固定五官、发型、服装和配色" \
+  --model "MODEL_CODE" \
+  --dry-run
+pavo canvas shortcut apply character_setting \
+  --source "角色参考图" \
+  --prompt "固定五官、发型、服装和配色" \
+  --model "MODEL_CODE"
+```
+
+连续镜头可使用 CLI-only 的 `pavo.storyboard/v1` Schema。它存储在普通文本节点里，不要求后端新增分镜节点类型；人物由 `characters/character_ids` 锁定，产品、道具和车辆等固定主体由 `subjects/subject_ids` 锁定。离线 `template/lint/compile` 用于起草、检查质量与预览最终提示词；`build` 会把稳定 shot ID 编译为规范提示词、图片/视频节点、引用连线和 group，但不会自动生成：
+
+```bash
+pavo canvas storyboard profile list
+pavo canvas storyboard template --profile cinematic --shots 8 --output storyboard.json
+pavo canvas storyboard lint storyboard.json --strict
+pavo canvas storyboard compile storyboard.json --kind all --strict --output prompts.json
+pavo canvas storyboard create --profile cinematic --title "雨夜重逢" --brief "两位旧友在车站重逢，人物与场景连续" --shots 8
+pavo canvas storyboard generate "STORYBOARD_NODE"
+pavo canvas storyboard show "STORYBOARD_NODE"
+pavo canvas storyboard validate "STORYBOARD_NODE" --strict
+pavo canvas storyboard build "STORYBOARD_NODE" --image-model "MODEL_CODE" --with-video --video-model "MODEL_CODE" --dry-run --strict
+pavo canvas storyboard build "STORYBOARD_NODE" --image-model "MODEL_CODE" --with-video --video-model "MODEL_CODE" --strict
+pavo canvas validate --all --strict
+```
+
+`lint` 会把 Schema error、提示词质量 warning 和参考资产 advisory 分开；`model show/explain` 把实时模型约束转换成 CLI 实际默认参数。相同 storyboard 重复 build 且无需同步时返回 `changed:false`，不会发送空 batch 或复制节点。
 
 运行节点会按前端约定回写节点执行态和最终 URL/文本结果，确保网页刷新后仍能恢复和展示。命令默认等待生成终态；传 `--download` 后，成功资源默认保存到当前工作区 `pavo_outputs/canvas/<task_id>/`，也可用 `--output-dir` 指定目录。输出中的每个成功结果增加绝对 `local_path`，单项下载失败只增加 `download_error`，不会改变生成任务的成功状态。异步提交用 `--wait=false`，再按返回的 `task_id` 查询、等待或取消；异步模式不能同时下载。生成提交不会自动重试，避免重复创建任务：
 
@@ -199,6 +237,8 @@ pavo canvas artifact delete "ARTIFACT_UUID" --yes
 Artifact 列表的 `page_size` 与 `pagination.total` 都按“有产物的日期组”计算。删除是幂等软删历史记录，不删除节点当前资源、已保存资产或对象存储；批量最多 100 个 UUID。
 
 删除项目、节点、连线、group 或 artifact 历史记录需要显式 `--yes`。完整命令、NDJSON 与节点 data 约定见 `skills/canvas/references/`。
+
+面向 Agent 的完整可执行案例位于 `skills/canvas/examples/`，覆盖项目绑定、上传生成、实时 shortcut、结构化 storyboard、NDJSON、DAG、artifact、逐节点类型及失败恢复。每个 case 都包含前置条件、完整命令、输出字段和验收标准。
 
 ## 查询支持的模型
 

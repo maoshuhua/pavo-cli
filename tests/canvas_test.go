@@ -321,6 +321,81 @@ func TestCLICanvasStatusReturnsFrontendURL(t *testing.T) {
 	}
 }
 
+func TestCLICanvasStoryboardOfflineQualityCommands(t *testing.T) {
+	directory := t.TempDir()
+	templatePath := filepath.Join(directory, "storyboard.json")
+	stdout, stderr := executeCanvasCLI(t, "http://unused.example.test", []string{"canvas", "storyboard", "template", "--profile", "commercial", "--shots", "3", "--output", templatePath})
+	if stderr != "" || !strings.Contains(stdout, `"operation":"storyboard.template"`) {
+		t.Fatalf("template stdout=%q stderr=%q", stdout, stderr)
+	}
+	if _, err := os.Stat(templatePath); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr = executeCanvasCLI(t, "http://unused.example.test", []string{"canvas", "storyboard", "lint", templatePath})
+	if stderr != "" {
+		t.Fatalf("lint stderr=%q", stderr)
+	}
+	var lint struct {
+		Valid        bool `json:"valid"`
+		QualityReady bool `json:"quality_ready"`
+		ShotCount    int  `json:"shot_count"`
+		Warnings     int  `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &lint); err != nil {
+		t.Fatalf("lint stdout=%q: %v", stdout, err)
+	}
+	if !lint.Valid || lint.QualityReady || lint.ShotCount != 3 || lint.Warnings == 0 {
+		t.Fatalf("lint=%#v", lint)
+	}
+	stdout, stderr = executeCanvasCLI(t, "http://unused.example.test", []string{"canvas", "storyboard", "compile", templatePath, "--kind", "image"})
+	if stderr != "" || !strings.Contains(stdout, `"kind":"image"`) || !strings.Contains(stdout, `"image_prompt":"`) || strings.Contains(stdout, `"video_prompt":"`) {
+		t.Fatalf("compile stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func TestCLICanvasModelShowExplainsLiveDefaults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != api.CanvasModelOptionsPath || request.URL.Query().Get("scene_code") != "canvas_video" {
+			t.Fatalf("request=%s", request.URL.String())
+		}
+		_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{"items":[{"model_code":"video-x","allowed":true,"is_online":true,"constraints":{"aspect_ratios":["16:9"],"resolutions":["hd"],"mode_types":["image_to_video"],"supported_duration_seconds":[4,8]}}]}}`))
+	}))
+	defer server.Close()
+	stdout, stderr := executeCanvasCLI(t, server.URL, []string{"canvas", "model", "show", "video-x", "--scene", "canvas_video"})
+	if stderr != "" || !strings.Contains(stdout, `"available":true`) || !strings.Contains(stdout, `"duration":4`) || !strings.Contains(stdout, `"ratio":"16:9"`) {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func TestCLICanvasApplyReadsNDJSONFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "workflow.ndjson")
+	if err := os.WriteFile(file, []byte("{\"op\":\"node.create\",\"as\":\"copy\",\"type\":\"text\",\"name\":\"文案\",\"prompt\":\"一句克制旁白\"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case api.CanvasProjectDetailPath:
+			_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{"current_canvas":{"canvas_uuid":"canvas-1"},"node_list":[],"connection_list":[],"version":2}}`))
+		case "/api/v1/pixa/canvas/project/project-1/nodes/batch":
+			var body api.CanvasBatchRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body.Nodes.Create) != 1 || body.Nodes.Create[0].Type != "text" {
+				t.Fatalf("body=%#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"code":"000000","message":"success","data":{"version":3}}`))
+		default:
+			t.Fatalf("path=%q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	stdout, stderr := executeCanvasCLI(t, server.URL, []string{"canvas", "apply", "--file", file, "--project", "project-1", "--canvas", "canvas-1"})
+	if stderr != "" || !strings.Contains(stdout, `"node.create":1`) || !strings.Contains(stdout, `"version":3`) {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
 func executeCanvasCLI(t *testing.T, baseURL string, args []string) (string, string) {
 	t.Helper()
 	t.Setenv(config.EnvAPIBaseURL, baseURL)

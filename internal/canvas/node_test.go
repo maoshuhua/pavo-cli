@@ -61,3 +61,15 @@ func TestApplyModelConfigurationUsesLiveConstraints(t *testing.T) {
 		t.Fatalf("params = %#v", params)
 	}
 }
+
+func TestExplainCanvasModelReturnsEffectiveDefaults(t *testing.T) {
+	raw := json.RawMessage(`{"items":[{"model_code":"video-x","allowed":true,"is_online":true,"future_capability":{"x":1},"constraints":{"aspect_ratios":["16:9","9:16"],"resolutions":["hd"],"mode_types":["text_to_video"],"supported_duration_seconds":[4,8],"supports_audio_generation":true}}]}`)
+	explanation, err := ExplainCanvasModel(raw, "canvas_video", "video-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, _ := explanation.EffectiveDefaults["settings"].(map[string]any)
+	if !explanation.Available || explanation.NodeType != "video" || explanation.EffectiveDefaults["duration"] != float64(4) || settings["ratio"] != "16:9" || settings["resolution"] != "hd" || len(explanation.Guidance) < 2 || !strings.Contains(string(explanation.Raw), "future_capability") {
+		t.Fatalf("explanation = %#v", explanation)
+	}
+}

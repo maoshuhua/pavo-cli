@@ -297,12 +297,8 @@ func SetPrompt(data map[string]any, nodeType, prompt string) {
 			params["modeCode"] = "text_common"
 		}
 	}
-	if prompt == "" {
-		params["prompt"] = []any{}
-	} else {
-		params["prompt"] = []any{map[string]any{"type": "text", "content": prompt}}
-	}
 	data["params"] = params
+	ReplaceTextPrompt(data, prompt)
 }
 
 func SetModel(data map[string]any, model string) {
